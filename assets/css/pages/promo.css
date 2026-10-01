@@ -1,0 +1,128 @@
+/***
+Promo Page
+***/
+.page-content {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+.ie8 .page-content {
+    padding: 0 !important;
+}
+
+.promo-page {
+    padding-left: 0;
+    padding-right: 0;
+    min-height: 100%;
+}
+
+/*page row options*/
+.promo-page .block-transparent {
+    min-height: 120vh;
+    background-image: url("../../img/bg_ny.jpg");
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-position: center center;
+    background-attachment: fixed;
+    -webkit-background-size: cover;
+    -moz-background-size: cover;
+    -o-background-size: cover;
+    background-size: cover;
+    color: #fff;
+    height: 100vh;
+    margin-top:-5px;
+}
+
+.promo-page .block-transparent .wrap-primary {
+    background-color: rgba(0, 0, 0, 0.5);
+    height:100vh;
+    min-height: 120vh;
+}
+.promo-page .block-transparent .secondary-color {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+    color: #ffff1a;
+    font-size:20px;
+    font-weight:300;
+    margin-bottom:15px;
+}
+.promo-page .block-transparent .lead {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+    font-weight: 300;
+    font-size: 1.6em;
+    max-width: 700px;
+    margin: 0 auto;
+}
+.promo-page .block-transparent h1,
+.promo-page .block-transparent h2,
+.promo-page .block-transparent h3,
+.promo-page .block-transparent h4,
+.promo-page .block-transparent h4,
+.promo-page .block-transparent h6 {
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+    font-family: "Muli", "Lato", sans-serif;
+}
+
+.head-img {
+    width:75px;
+    height:75px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.head-title {
+    font-size: 2em;
+    font-weight: 300;
+    text-align: center;
+    color: #fff !important;
+}
+.profile-header-btn .btn {
+    margin: 10px;
+    padding: 12px 20px;
+}
+.btn-ar {
+    border-radius: 2px;
+    font-size: 14px;
+}
+
+/* ---------------------------------------------------- */
+/* Animations Delay */
+/* ---------------------------------------------------- */
+.animation-delay-1 {
+    animation-delay: .1s !important;
+}
+.animation-delay-2 {
+    animation-delay: .2s !important;
+}
+.animation-delay-3 {
+    animation-delay: .3s !important;
+}
+.animation-delay-4 {
+    animation-delay: .4s !important;
+}
+.animation-delay-5 {
+    animation-delay: .5s !important;
+}
+.animation-delay-6 {
+    animation-delay: .6s !important;
+}
+.animation-delay-7 {
+    animation-delay: .7s !important;
+}
+.animation-delay-8 {
+    animation-delay: .8s !important;
+}
+.animation-delay-9 {
+    animation-delay: .9s !important;
+}
+
+.pulseBtn {
+    padding:1rem 2rem;
+    margin-left:15px;
+    box-shadow: 0 0 0 0 rgba(88, 120, 243, 0.4);
+    -moz-animation: pulse 2s infinite;
+    -webkit-animation: pulse 2s infinite;
+    animation: pulse 2s infinite;
+}
