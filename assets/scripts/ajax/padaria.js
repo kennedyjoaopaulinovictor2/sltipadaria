@@ -234,6 +234,22 @@ $('#btnMapaSaida').click(function () {
 });
 
 var camposFechoValor = ['moeda_10', 'moeda_20', 'moeda_50', 'moeda_100', 'moeda_200', 'dinheiro_200', 'dinheiro_500', 'dinheiro_1000', 'dinheiro_2000', 'dinheiro_5000', 'tpa', 'notas'];
+function atualizarTotaisFechoValor($linha) {
+    var totalDinheiro = 0;
+    $.each(camposFechoValor, function (_, campo) {
+        if (campo !== 'tpa') {
+            var valor = parseFloat(String($linha.find('[data-campo="' + campo + '"]').val() || '').replace(',', '.'));
+            if (!isNaN(valor))
+                totalDinheiro += valor;
+        }
+    });
+    var tpa = parseFloat(String($linha.find('[data-campo="tpa"]').val() || '').replace(',', '.'));
+    if (isNaN(tpa))
+        tpa = 0;
+    $linha.find('.total-dinheiro-fecho-valor').text(totalDinheiro.toFixed(2));
+    $linha.find('.total-fecho-valor').text((totalDinheiro + tpa).toFixed(2));
+}
+
 function listarGerirFechoValor() {
     var mes = $('#mesFechoValor').val();
     ajaxApp('padaria/listarGerirFechoValor', {mes: mes}, function (r) {
@@ -263,7 +279,9 @@ function listarGerirFechoValor() {
                 }
                 $('<td>').append($entrada).appendTo($linha);
             });
-            $('<td>').addClass('atendente-fecho-valor').text(dia.atendente).appendTo($linha);
+            $('<td>').addClass('total-dinheiro-fecho-valor').appendTo($linha);
+            $('<td>').addClass('total-fecho-valor').appendTo($linha);
+            atualizarTotaisFechoValor($linha);
             $corpo.append($linha);
         });
     }, false, false);
@@ -296,6 +314,7 @@ $(document).on('input', '#corpoTabelaFechoValor input', function () {
         else
             $entrada.val($entrada.attr('data-ultimo-valor'));
     }
+    atualizarTotaisFechoValor($entrada.closest('tr'));
 });
 $(document).on('keydown', '#corpoTabelaFechoValor input', function (event) {
     if (event.key === 'Enter') {
@@ -330,8 +349,8 @@ function guardarFechoValorCelula($entrada) {
     $entrada.prop('disabled', true);
     ajaxApp('padaria/guardarFechoValor', {d: $linha.attr('data-data'), campo: campo, valor: valor, editar: editar ? '1' : '0'}, function (r) {
         if (r.r === 0) {
-            $linha.find('.atendente-fecho-valor').text(r.atendente);
             $entrada.val(valor === '' ? '0' : valor).attr('data-guardado', '1').removeAttr('data-editando').prop('disabled', false).prop('readonly', true);
+            atualizarTotaisFechoValor($linha);
         } else if (r.r === 4) {
             alertSwal('Esta célula já foi guardada.');
             listarGerirFechoValor();
@@ -341,4 +360,3 @@ function guardarFechoValorCelula($entrada) {
         }
     }, false, false);
 }
-

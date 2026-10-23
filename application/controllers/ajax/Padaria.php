@@ -14,6 +14,25 @@ class Padaria extends CI_Controller {
         includeModals(array('padaria', 'configuracao'));
     }
 
+    private function enviarExcel($writer, $nomeFicheiro) {
+        $conteudo = $writer->writeToString();
+        if (!is_string($conteudo) || substr($conteudo, 0, 2) !== 'PK')
+            show_error('Não foi possível gerar o ficheiro Excel.', 500);
+
+        while (ob_get_level() > 0) {
+            if (!ob_end_clean())
+                break;
+        }
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $nomeFicheiro . '"; filename*=UTF-8\'\'' . rawurlencode($nomeFicheiro));
+        header('Content-Length: ' . strlen($conteudo));
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        echo $conteudo;
+        exit;
+    }
+
     function addUpdateVenda() {
         if (!empty($this->input->post('u')) && !empty($this->input->post('p')) && !empty($this->input->post('t')) && !empty($this->input->post('q'))) {
             if (isNumeric($this->input->post('u')) && isNumeric($this->input->post('p')) && isNumeric($this->input->post('t')) && isNumeric($this->input->post('q'))) {
@@ -164,7 +183,7 @@ class Padaria extends CI_Controller {
         for ($dia = clone $data; $dia <= $ultimoDia; $dia->modify('+1 day')) {
             $dataDia = $dia->format('Y-m-d');
             $registo = isset($registos[$dataDia]) ? $registos[$dataDia] : array();
-            $linha = array('data' => $dataDia, 'dataTexto' => $dia->format('d/m/Y'), 'atendente' => isset($registo['atendente']) ? $registo['atendente'] : '', 'editavel' => $dataDia <= $hoje);
+            $linha = array('data' => $dataDia, 'dataTexto' => $dia->format('d/m/Y'), 'editavel' => $dataDia <= $hoje);
             $camposGuardados = isset($registo['campos_guardados']) ? explode(',', $registo['campos_guardados']) : array();
             foreach ($campos as $campo) {
                 $salvo = in_array($campo, $camposGuardados, TRUE);
@@ -208,7 +227,7 @@ class Padaria extends CI_Controller {
 
         $editar = $this->input->post('editar', TRUE) === '1';
         $resultado = $this->padaria_m->guardarFechoValorCelula($data, $campo, $valor, $codUtilizador, $editar);
-        retornAjax(array('r' => $resultado, 'atendente' => ($resultado == 0 ? nomeUtilizador() : '')));
+        retornAjax(array('r' => $resultado));
     }
 
     public function exportarFechoValor() {
@@ -230,8 +249,12 @@ class Padaria extends CI_Controller {
         $tiposColuna = array('DATA' => 'string');
         foreach ($campos as $campo)
             $tiposColuna[$campo] = (in_array($campo, array('tpa', 'notas'), TRUE) ? 'price' : 'integer');
-        $tiposColuna['ATENDENTE'] = 'string';
-        $larguras = array_merge(array(15), array(12, 12, 12, 12, 12, 12, 12, 14, 14, 14, 18, 18, 24));
+        $larguras = array(15);
+        foreach ($campos as $campo)
+            $larguras[] = (in_array($campo, array('tpa', 'notas'), TRUE) ? 18 : 12);
+        $tiposColuna['TOTAL DINHEIRO'] = 'price';
+        $tiposColuna['TOTAL'] = 'price';
+        $larguras = array_merge($larguras, array(18, 18));
         $writer->writeSheetHeader($sheet, $tiposColuna, array('suppress_row' => TRUE, 'widths' => $larguras, 'freeze_rows' => 3, 'freeze_columns' => 1, 'orientation' => 'landscape', 'fit_to_page' => TRUE));
 
         $meses = array(1 => 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro');
@@ -247,15 +270,16 @@ class Padaria extends CI_Controller {
         $linhaGrupo[6] = 'DINHEIRO (CASH) KZ';
         $linhaGrupo[11] = 'TPA';
         $linhaGrupo[12] = 'NOTAS';
-        $linhaGrupo[13] = 'ATENDENTE';
+        $linhaGrupo[13] = 'TOTAL DINHEIRO';
+        $linhaGrupo[14] = 'TOTAL';
         $writer->markMergedCell($sheet, 1, 0, 2, 0);
         $writer->markMergedCell($sheet, 1, 1, 1, 5);
         $writer->markMergedCell($sheet, 1, 6, 1, 10);
-        for ($coluna = 11; $coluna <= 13; $coluna++)
+        for ($coluna = 11; $coluna <= 14; $coluna++)
             $writer->markMergedCell($sheet, 1, $coluna, 2, $coluna);
         $writer->writeSheetRow($sheet, $linhaGrupo, array('font-style' => 'bold', 'fill' => '#B4C7E7', 'halign' => 'center'));
 
-        $cabecalho = array('', '10,00', '20,00', '50,00', '100,00', '200,00', '200,00', '500,00', '1 000,00', '2 000,00', '5 000,00', '', '', '');
+        $cabecalho = array('', '10,00', '20,00', '50,00', '100,00', '200,00', '200,00', '500,00', '1 000,00', '2 000,00', '5 000,00', '', '', '', '');
         $writer->writeSheetRow($sheet, $cabecalho, array('font-style' => 'bold', 'fill' => '#D9E2F3', 'halign' => 'center'));
 
         $data = new DateTime($dataInicio);
@@ -265,18 +289,26 @@ class Padaria extends CI_Controller {
             $fecho = isset($fechos[$dataDia]) ? $fechos[$dataDia] : array();
             $camposGuardados = isset($fecho['campos_guardados']) ? explode(',', $fecho['campos_guardados']) : array();
             $linha = array($dia->format('d/m/Y'));
-            foreach ($campos as $campo)
-                $linha[] = (in_array($campo, $camposGuardados, TRUE) && isset($fecho[$campo]) ? $fecho[$campo] : '');
-            $linha[] = isset($fecho['atendente']) ? $fecho['atendente'] : '';
+            $totalDinheiro = 0;
+            $tpa = 0;
+            foreach ($campos as $campo) {
+                $guardado = in_array($campo, $camposGuardados, TRUE) && isset($fecho[$campo]);
+                $valor = ($guardado ? $fecho[$campo] : '');
+                $linha[] = $valor;
+                if ($guardado) {
+                    if ($campo === 'tpa')
+                        $tpa = (float) $valor;
+                    else
+                        $totalDinheiro += (float) $valor;
+                }
+            }
+            $linha[] = $totalDinheiro;
+            $linha[] = $totalDinheiro + $tpa;
             $writer->writeSheetRow($sheet, $linha);
         }
 
         $nomeFicheiro = 'fecho-valor-' . $mes . '.xlsx';
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment; filename="' . $nomeFicheiro . '"');
-        header('Cache-Control: no-store, no-cache, must-revalidate');
-        $writer->writeToStdOut();
-        exit;
+        $this->enviarExcel($writer, $nomeFicheiro);
     }
 
     public function exportarMapaFecho() {
@@ -377,11 +409,7 @@ class Padaria extends CI_Controller {
         }
 
         $nomeFicheiro = 'mapa-fecho-' . $mes . '.xlsx';
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment; filename="' . $nomeFicheiro . '"');
-        header('Cache-Control: no-store, no-cache, must-revalidate');
-        $writer->writeToStdOut();
-        exit;
+        $this->enviarExcel($writer, $nomeFicheiro);
     }
 
     public function exportarMapaSaidasValores() {
@@ -472,10 +500,6 @@ class Padaria extends CI_Controller {
         }
 
         $nomeFicheiro = 'mapa-saidas-valores-' . $mes . '.xlsx';
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment; filename="' . $nomeFicheiro . '"');
-        header('Cache-Control: no-store, no-cache, must-revalidate');
-        $writer->writeToStdOut();
-        exit;
+        $this->enviarExcel($writer, $nomeFicheiro);
     }
 }

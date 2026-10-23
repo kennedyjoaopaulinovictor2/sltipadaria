@@ -91,7 +91,8 @@
                                             <th colspan="5" class="text-center">DINHEIRO (CASH) KZ</th>
                                             <th rowspan="2">TPA</th>
                                             <th rowspan="2">NOTAS</th>
-                                            <th rowspan="2">ATENDENTE</th>
+                                            <th rowspan="2">TOTAL DINHEIRO</th>
+                                            <th rowspan="2">TOTAL</th>
                                         </tr>
                                         <tr>
                                             <th>10,00</th><th>20,00</th><th>50,00</th><th>100,00</th><th>200,00</th>

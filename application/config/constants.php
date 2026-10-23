@@ -139,7 +139,7 @@ defined('USER_ACESSO')         || define('USER_ACESSO', 'acesso');
 defined('APP_BD_HOST')         || define('APP_BD_HOST', 'localhost');
 defined('APP_BD_USER')         || define('APP_BD_USER', 'root');
 defined('APP_BD_PASS')         || define('APP_BD_PASS', '');
-defined('APP_BD_NAME')      || define('APP_BD_NAME', 'slti');
+defined('APP_BD_NAME')      || define('APP_BD_NAME', 'padaria');
 defined('APP_BD_DBCOLLAT')     || define('APP_BD_DBCOLLAT', 'utf8_general_ci');
 
 
