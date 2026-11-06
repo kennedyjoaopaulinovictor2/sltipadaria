@@ -7,35 +7,83 @@
 
 class Produto_m extends CI_Model {
 
-    public function getPlanos($columns = '', $codClasse = '') {
-        $query = $this->db->query("SELECT " . ($columns ? $columns : 'p.cod,p.opcao,p.estado,p.cod_curso,c.nome nomeCurso') . " FROM plano p" . (!empty($codClasse) ? " JOIN curricular a ON a.cod_plano=p.cod AND a.cod_classe=$codClasse AND a.eliminado='0'" : "") . " LEFT JOIN curso c ON c.cod=p.cod_curso WHERE p.eliminado='0' GROUP BY p.cod ORDER BY p.opcao");
+    public function getCategorias() {
+        $query = $this->db->select('cod,nome')
+                ->from('categoria')
+                ->where('eliminado', 0)
+                ->order_by('nome', 'ASC')
+                ->get();
         return ($query->num_rows() > 0 ? $query->result() : NULL);
     }
 
-    public function getCurriculares($p, $c) {
-        $query = $this->db->query("SELECT c.cod,c.codigo,d.nome,c.estado,c.classificacao FROM curricular c JOIN disciplina d ON d.cod=c.cod_disciplina WHERE c.eliminado='0' AND c.cod_plano=$p AND c.cod_classe=$c ORDER BY c.codigo");
+    public function getProdutos($estado = 'all', $codCategoria = '') {
+        $this->db->select('p.cod,p.codigo,p.nome,p.url_file,p.preco,p.eliminado,c.nome AS categoria')
+                ->from('produto p')
+                ->join('categoria c', 'c.cod=p.cod_categoria', 'left')
+                ->order_by('c.nome', 'ASC')
+                ->order_by('p.nome', 'ASC');
+
+        if ($estado === '0' || $estado === '1') {
+            $this->db->where('p.eliminado', (int) $estado);
+        }
+        if (!empty($codCategoria)) {
+            $this->db->where('p.cod_categoria', (int) $codCategoria);
+        }
+
+        $query = $this->db->get();
         return ($query->num_rows() > 0 ? $query->result_array() : NULL);
     }
 
-    public function insertCurriculo() {
-        $r = $this->configuracao_m->checkValorExistTable('curricular', ("(codigo=" . $this->db->escape(filterString($this->input->post('codigoCur'))) . " OR (cod_disciplina=" . $this->db->escape($this->input->post('discCur')) . " AND cod_classe=" . $this->db->escape($this->input->post('classeCur')) . " AND cod_plano=" . $this->db->escape($this->input->post('planoCur')) . ")) AND eliminado='0'"));
-        if ($r == 1)
-            $r = ($this->db->insert('curricular', array('codigo' => filterString($this->input->post('codigoCur')), 'classificacao' => $this->input->post('notaCur'), 'cod_disciplina' => $this->input->post('discCur'), 'cod_classe' => $this->input->post('classeCur'), 'cod_plano' => $this->input->post('planoCur'))) ? 0 : -1);
-        return $r;
+    public function getProduto($cod) {
+        $query = $this->db->select('cod,codigo,nome,url_file,preco,cod_categoria,eliminado')
+                ->from('produto')
+                ->where('cod', (int) $cod)
+                ->limit(1)
+                ->get();
+        return ($query->num_rows() > 0 ? $query->row_array() : NULL);
     }
 
-    public function getCurriculo($cod) {
-        return $this->db->query("SELECT cod,codigo,classificacao,cod_disciplina,cod_classe,cod_plano FROM curricular WHERE cod=$cod AND eliminado='0' LIMIT 1")->row();
+    public function salvarProduto($dados, $cod = '') {
+        if (!empty($cod) && empty($this->getProduto($cod))) {
+            return -4;
+        }
+
+        $categoria = $this->db->select('cod')
+                ->from('categoria')
+                ->where('cod', (int) $dados['cod_categoria'])
+                ->where('eliminado', 0)
+                ->limit(1)
+                ->get();
+        if ($categoria->num_rows() === 0) {
+            return -5;
+        }
+
+        if ($dados['codigo'] !== '') {
+            $this->db->from('produto')
+                    ->where('codigo', $dados['codigo']);
+            if (!empty($cod)) {
+                $this->db->where('cod !=', (int) $cod);
+            }
+            if ($this->db->count_all_results() > 0) {
+                return -3;
+            }
+        }
+
+        if (!empty($cod)) {
+            unset($dados['cod_utilizador']);
+            return $this->db->where('cod', (int) $cod)->update('produto', $dados) ? 0 : -1;
+        }
+
+        $dados['url_file'] = (!empty($dados['url_file']) ? $dados['url_file'] : IMG_NOT_IMG);
+        $dados['eliminado'] = 0;
+        return $this->db->insert('produto', $dados) ? 0 : -1;
     }
 
-    public function updateCurriculo() {
-        $r = $this->configuracao_m->checkValorExistTable('curricular', ("(codigo=" . $this->db->escape(filterString($this->input->post('codigoCur'))) . " OR (cod_disciplina=" . $this->db->escape($this->input->post('discCur')) . " AND cod_classe=" . $this->db->escape($this->input->post('classeCur')) . " AND cod_plano=" . $this->db->escape($this->input->post('planoCur')) . ")) AND eliminado='0' AND cod!=" . $this->input->post('codCur')));
-        if ($r == 1)
-            $r = ($this->db->update('curricular', array('codigo' => filterString($this->input->post('codigoCur')), 'classificacao' => $this->input->post('notaCur'), 'cod_disciplina' => $this->input->post('discCur'), 'cod_classe' => $this->input->post('classeCur'), 'cod_plano' => $this->input->post('planoCur')), "cod=" . $this->input->post('codCur')) ? 0 : -1);
-        return $r;
-    }
-
-    public function deleteCurriculo($cod) {
-        return $this->db->update('curricular', array('eliminado' => '1', 'estado' => '2'), "cod=" . $cod) ? 1 : 0;
+    public function alterarEstado($cod, $estado) {
+        if (empty($this->getProduto($cod))) {
+            return -4;
+        }
+        return $this->db->where('cod', (int) $cod)
+                        ->update('produto', array('eliminado' => (int) $estado)) ? 0 : -1;
     }
 }

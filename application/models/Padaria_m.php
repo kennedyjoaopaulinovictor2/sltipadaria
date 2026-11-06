@@ -18,7 +18,7 @@ class Padaria_m extends CI_Model {
     public function insertUpdateVenda() {
         $this->db->trans_start();
         $codU = $this->input->post('u');
-        $produ = $this->db->query("SELECT p.preco,v.cod codV,v.qtd,v.valor FROM produto p LEFT JOIN venda_dia v ON v.cod_produto=p.cod AND v.data_venda=CURRENT_DATE  WHERE p.cod=" . $this->db->escape($this->input->post('p')) . " LIMIT 1");
+        $produ = $this->db->query("SELECT p.preco,v.cod codV,v.qtd,v.valor FROM produto p LEFT JOIN venda_dia v ON v.cod_produto=p.cod AND v.data_venda=CURRENT_DATE WHERE p.cod=" . $this->db->escape($this->input->post('p')) . " AND p.eliminado='0' LIMIT 1");
         if ($codU && $produ->num_rows() > 0) {
             //VENDER
             if ($this->input->post('t') == 1) {
@@ -49,7 +49,16 @@ class Padaria_m extends CI_Model {
     }
 
     public function insertSaidaValor() {
-        return $this->db->insert('saida', array('saida' => 1, 'motivo' => filterString($this->input->post('m')), 'valor' => moedaBd($this->input->post('v')), 'cod_utilizador' => $this->input->post('u'))) ? 0 : 1;
+        $dataHora = dataHoraBD();
+        return $this->db->insert('saida', array(
+            'saida' => 1,
+            'eliminado' => '0',
+            'data' => $dataHora,
+            'data_cricao' => $dataHora,
+            'motivo' => filterString($this->input->post('m')),
+            'valor' => moedaBd($this->input->post('v')),
+            'cod_utilizador' => $this->input->post('u')
+        )) ? 0 : 1;
     }
 
     public function deleteSaidaValor($u) {
@@ -64,6 +73,14 @@ class Padaria_m extends CI_Model {
     public function getSaidasValoresMes($dataInicio, $dataFim) {
         $query = $this->db->query("SELECT cod,DATE(data) data_saida,motivo,valor FROM saida WHERE eliminado='0' AND saida=1 AND data >= ? AND data < DATE_ADD(?, INTERVAL 1 DAY) ORDER BY data,cod", array($dataInicio, $dataFim));
         return ($query->num_rows() > 0 ? $query->result_array() : NULL);
+    }
+
+    public function editarSaidaValor($cod, $motivo, $valor, $codUtilizador) {
+        return $this->db->update('saida', array(
+            'motivo' => $motivo,
+            'valor' => $valor,
+            'cod_utilizador' => $codUtilizador
+        ), array('cod' => $cod, 'eliminado' => '0', 'saida' => '1')) ? 0 : 1;
     }
 
     public function getFechosValorMes($dataInicio, $dataFim) {
@@ -104,26 +121,37 @@ class Padaria_m extends CI_Model {
         return $this->db->trans_commit() ? 0 : 1;
     }
 
-    public function insertUpdateFecho() {
-        $this->db->trans_start();
-        $codU = $this->input->post('u');
-        $produ = $this->db->query("SELECT p.preco,v.cod codV,v.qtd,v.qtd_produzida,v.valor FROM produto p JOIN venda_dia v ON v.cod_produto=p.cod AND v.data_venda=" . $this->db->escape($this->input->post('d')) . "  WHERE p.cod=" . $this->db->escape($this->input->post('p')) . " LIMIT 1");
-        if ($codU && $produ->num_rows() > 0) {
-            $r = ($this->input->post('q') >= $produ->row()->qtd ? $this->input->post('q') - $produ->row()->qtd : 0);
-            $this->db->update('venda_dia', array('qtd_produzida' => $this->input->post('q'), 'data_fecho' => dataHoraBD(), 'cod_utilizador_fecho' => $this->input->post('u')), 'cod=' . $produ->row()->codV);
-            return array($this->db->trans_complete() ? 0 : -1, ($r . ' - ' . moeda_akz($r * $produ->row()->preco)));
-        } else {
+    public function insertUpdateFecho($codUtilizador = NULL, $codProduto = NULL, $data = NULL, $quantidade = NULL) {
+        $codU = ($codUtilizador === NULL ? $this->input->post('u') : $codUtilizador);
+        $codProduto = ($codProduto === NULL ? $this->input->post('p') : $codProduto);
+        $data = ($data === NULL ? $this->input->post('d') : $data);
+        $quantidade = ($quantidade === NULL ? $this->input->post('q') : $quantidade);
+        $this->db->trans_begin();
+        $produ = $this->db->query("SELECT p.preco,v.cod codV,v.qtd,v.qtd_produzida,v.valor FROM produto p JOIN venda_dia v ON v.cod_produto=p.cod AND v.data_venda=" . $this->db->escape($data) . " WHERE p.cod=" . $this->db->escape($codProduto) . " LIMIT 1 FOR UPDATE");
+        if (empty($codU) || $produ->num_rows() === 0) {
+            $this->db->trans_rollback();
             return -43;
         }
+
+        $venda = $produ->row();
+        $restante = ($quantidade >= $venda->qtd ? $quantidade - $venda->qtd : 0);
+        $atualizado = $this->db->update('venda_dia', array('qtd_produzida' => $quantidade, 'data_fecho' => dataHoraBD(), 'cod_utilizador_fecho' => $codU), array('cod' => $venda->codV));
+        if (!$atualizado || !$this->db->trans_status()) {
+            $this->db->trans_rollback();
+            return -1;
+        }
+        if (!$this->db->trans_commit())
+            return -1;
+        return array(0, ($restante . ' - ' . moeda_akz($restante * $venda->preco)));
     }
 
     public function getProdutosFecho($d) {
-        $query = $this->db->query("SELECT p.cod,p.codigo,p.nome,p.url_file,p.preco,v.qtd qtdV, v.qtd_produzida qtdP, v.valor valV FROM produto p JOIN categoria c ON c.cod=p.cod_categoria JOIN venda_dia v ON v.cod_produto=p.cod AND DATE(v.data_venda)=" . $this->db->escape($d) . " AND p.eliminado='0' GROUP BY p.cod ORDER BY c.cod, p.nome;");
+        $query = $this->db->query("SELECT p.cod,p.codigo,p.nome,p.url_file,p.preco,v.qtd qtdV, v.qtd_produzida qtdP, v.valor valV FROM produto p JOIN categoria c ON c.cod=p.cod_categoria JOIN venda_dia v ON v.cod_produto=p.cod AND DATE(v.data_venda)=" . $this->db->escape($d) . " GROUP BY p.cod ORDER BY c.cod, p.nome;");
         return ($query->num_rows() > 0 ? $query->result_array() : NULL);
     }
 
     public function getMapaMensalFecho($dataInicio, $dataFim) {
-        $query = $this->db->query("SELECT p.cod,p.nome,v.data_venda,v.qtd qtd_vendida,v.valor total_vendido,GREATEST(v.qtd_produzida-v.qtd,0) qtd_restante,pe.nome funcionario FROM produto p JOIN categoria c ON c.cod=p.cod_categoria LEFT JOIN venda_dia v ON v.cod_produto=p.cod AND v.data_venda BETWEEN ? AND ? LEFT JOIN utilizador u ON u.cod=v.cod_utilizador_fecho LEFT JOIN pessoa pe ON pe.cod=u.cod_pessoa WHERE p.eliminado='0' ORDER BY c.cod,p.nome,v.data_venda", array($dataInicio, $dataFim));
+        $query = $this->db->query("SELECT p.cod,p.nome,v.cod cod_venda,v.data_venda,v.qtd_produzida,v.qtd qtd_vendida,v.valor total_vendido,GREATEST(v.qtd_produzida-v.qtd,0) qtd_restante,pe.nome funcionario FROM produto p JOIN categoria c ON c.cod=p.cod_categoria LEFT JOIN venda_dia v ON v.cod_produto=p.cod AND v.data_venda BETWEEN ? AND ? LEFT JOIN utilizador u ON u.cod=v.cod_utilizador_fecho LEFT JOIN pessoa pe ON pe.cod=u.cod_pessoa WHERE p.eliminado='0' OR v.cod IS NOT NULL ORDER BY c.cod,p.nome,v.data_venda", array($dataInicio, $dataFim));
         return ($query->num_rows() > 0 ? $query->result_array() : NULL);
     }
 }
