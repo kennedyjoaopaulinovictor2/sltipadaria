@@ -88,12 +88,7 @@ function btnAddSaidaValor($id) {
                 },
                 function (r) {
                     if (r.r == 0) {
-                        $('#totalV').html(r.t);
-                        $("#msv" + $id).prop('disabled', true);
-                        $("#vsv" + $id).prop('disabled', true);
-                        $("#dsv" + $id).html(r.d);
-                        $("#btnsvs" + $id).text('Registada');
-                        $("#btnsv" + $id).remove();
+                        listarGerirSaida();
                     } else {
                         alertSwal('ERRO 00' + r.r + '! Operação não executada.');
                     }
@@ -135,6 +130,9 @@ function listarGerirSaida() {
                     $tabela.fnAddData(r.dados);
                     $('#totalS').html(r.dados.length);
                     $('#totalV').html(r.v);
+                } else if (r.r == 4) {
+                    $('#totalS').html('0');
+                    $('#totalV').html('0,00');
                 } else {
                     msgErroSpan('msgTabelaSaida', 'danger ', 'ERRO 00' + r.r, 'N&atilde;o encontro nenhum registo. (Selecione Para Adicionar Nova Saída de Valores)');
                 }
@@ -234,6 +232,33 @@ $('#btnMapaSaida').click(function () {
 });
 
 var camposFechoValor = ['moeda_10', 'moeda_20', 'moeda_50', 'moeda_100', 'moeda_200', 'dinheiro_200', 'dinheiro_500', 'dinheiro_1000', 'dinheiro_2000', 'dinheiro_5000', 'tpa', 'notas'];
+function atualizarTotalFechoValor($linha) {
+    var total = 0;
+    var valoresMoedas = {
+        moeda_10: 10,
+        moeda_20: 20,
+        moeda_50: 50,
+        moeda_100: 100,
+        moeda_200: 200,
+        dinheiro_200: 200,
+        dinheiro_500: 500,
+        dinheiro_1000: 1000,
+        dinheiro_2000: 2000,
+        dinheiro_5000: 5000
+    };
+
+    $.each(valoresMoedas, function (campo, valorUnidade) {
+        total += (parseInt($linha.find('[data-campo="' + campo + '"]').val(), 10) || 0) * valorUnidade;
+    });
+    total += parseFloat($linha.find('[data-campo="tpa"]').val()) || 0;
+    total += parseFloat($linha.find('[data-campo="notas"]').val()) || 0;
+
+    $linha.find('.total-fecho-valor').text(total.toLocaleString('pt-PT', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }));
+}
+
 function listarGerirFechoValor() {
     var mes = $('#mesFechoValor').val();
     ajaxApp('padaria/listarGerirFechoValor', {mes: mes}, function (r) {
@@ -263,7 +288,9 @@ function listarGerirFechoValor() {
                 }
                 $('<td>').append($entrada).appendTo($linha);
             });
-            $('<td>').addClass('atendente-fecho-valor').text(dia.atendente).appendTo($linha);
+            $('<td>').addClass('total-fecho-valor text-right').appendTo($linha);
+            atualizarTotalFechoValor($linha);
+            // $('<td>').addClass('atendente-fecho-valor').text(dia.atendente).appendTo($linha);
             $corpo.append($linha);
         });
     }, false, false);
@@ -296,6 +323,7 @@ $(document).on('input', '#corpoTabelaFechoValor input', function () {
         else
             $entrada.val($entrada.attr('data-ultimo-valor'));
     }
+    atualizarTotalFechoValor($entrada.closest('tr'));
 });
 $(document).on('keydown', '#corpoTabelaFechoValor input', function (event) {
     if (event.key === 'Enter') {
@@ -341,4 +369,3 @@ function guardarFechoValorCelula($entrada) {
         }
     }, false, false);
 }
-

@@ -49,7 +49,16 @@ class Padaria_m extends CI_Model {
     }
 
     public function insertSaidaValor() {
-        return $this->db->insert('saida', array('saida' => 1, 'motivo' => filterString($this->input->post('m')), 'valor' => moedaBd($this->input->post('v')), 'cod_utilizador' => $this->input->post('u'))) ? 0 : 1;
+        $dataHora = dataHoraBD();
+        return $this->db->insert('saida', array(
+            'saida' => 1,
+            'eliminado' => '0',
+            'data' => $dataHora,
+            'data_cricao' => $dataHora,
+            'motivo' => filterString($this->input->post('m')),
+            'valor' => moedaBd($this->input->post('v')),
+            'cod_utilizador' => $this->input->post('u')
+        )) ? 0 : 1;
     }
 
     public function deleteSaidaValor($u) {
