@@ -65,7 +65,7 @@
                                 </div>
                             </div>
                             <div class="tab-pane" id="tabMapaFechoValor">
-                                <?= get_instance()->load->view('atendimento/fecho_valor_mapa', array(), TRUE) ?>
+                                <?= get_instance()->load->view('atendimento/fecho_valor_mapa', array('contextoFechoValor' => 'admin'), TRUE) ?>
                             </div>
                         </div>
                     </div>

@@ -70,7 +70,7 @@
                     </div>
                 </div>
                 <div class="tab-pane" id="tab3">
-                    <?= get_instance()->load->view('atendimento/fecho_valor_mapa', array(), TRUE) ?>
+                    <?= get_instance()->load->view('atendimento/fecho_valor_mapa', array('contextoFechoValor' => 'atendimento'), TRUE) ?>
                 </div>
             </div>
         </div>

@@ -285,6 +285,8 @@ class Padaria extends CI_Controller {
         $dataFim = date('Y-m-t', strtotime($dataInicio));
         $registos = $this->padaria_m->getFechosValorMes($dataInicio, $dataFim);
         $campos = array('moeda_10', 'moeda_20', 'moeda_50', 'moeda_100', 'moeda_200', 'dinheiro_200', 'dinheiro_500', 'dinheiro_1000', 'dinheiro_2000', 'dinheiro_5000', 'tpa', 'notas');
+        $contexto = $this->input->post('contexto', TRUE);
+        $adminPodeEditarHistorico = $contexto === 'admin' && userModulo() === 'ADMINISTRADOR';
         $dias = array();
         $data = new DateTime($dataInicio);
         $ultimoDia = new DateTime($dataFim);
@@ -292,7 +294,8 @@ class Padaria extends CI_Controller {
         for ($dia = clone $data; $dia <= $ultimoDia; $dia->modify('+1 day')) {
             $dataDia = $dia->format('Y-m-d');
             $registo = isset($registos[$dataDia]) ? $registos[$dataDia] : array();
-            $linha = array('data' => $dataDia, 'dataTexto' => $dia->format('d/m/Y'), 'atendente' => isset($registo['atendente']) ? $registo['atendente'] : '', 'editavel' => $dataDia <= $hoje);
+            $editavel = ($adminPodeEditarHistorico ? $dataDia <= $hoje : $dataDia === $hoje);
+            $linha = array('data' => $dataDia, 'dataTexto' => $dia->format('d/m/Y'), 'atendente' => isset($registo['atendente']) ? $registo['atendente'] : '', 'editavel' => $editavel);
             $camposGuardados = isset($registo['campos_guardados']) ? explode(',', $registo['campos_guardados']) : array();
             foreach ($campos as $campo) {
                 $salvo = in_array($campo, $camposGuardados, TRUE);
@@ -313,6 +316,10 @@ class Padaria extends CI_Controller {
             retornAjax(array('r' => 2));
         $dataValidada = DateTime::createFromFormat('!Y-m-d', (string) $data);
         if (!$dataValidada || $dataValidada->format('Y-m-d') !== $data || substr($data, 0, 7) > date('Y-m') || $data > date('Y-m-d'))
+            retornAjax(array('r' => 2));
+        $contexto = $this->input->post('contexto', TRUE);
+        $adminPodeEditarHistorico = $contexto === 'admin' && userModulo() === 'ADMINISTRADOR';
+        if (!$adminPodeEditarHistorico && $data !== date('Y-m-d'))
             retornAjax(array('r' => 2));
 
         $campo = $this->input->post('campo', TRUE);

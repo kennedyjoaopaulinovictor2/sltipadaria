@@ -264,7 +264,8 @@ function atualizarTotalFechoValor($linha) {
 
 function listarGerirFechoValor() {
     var mes = $('#mesFechoValor').val();
-    ajaxApp('padaria/listarGerirFechoValor', {mes: mes}, function (r) {
+    var contexto = $('#tabelaFechoValor').attr('data-contexto');
+    ajaxApp('padaria/listarGerirFechoValor', {mes: mes, contexto: contexto}, function (r) {
         if (r.r !== 0) {
             alertSwal(r.r === 2 ? 'Selecione um mês válido, até o mês atual.' : 'Sessão expirada. Entre novamente na aplicação.');
             return;
@@ -359,7 +360,7 @@ function guardarFechoValorCelula($entrada) {
         return;
     }
     $entrada.prop('disabled', true);
-    ajaxApp('padaria/guardarFechoValor', {d: $linha.attr('data-data'), campo: campo, valor: valor, editar: editar ? '1' : '0'}, function (r) {
+    ajaxApp('padaria/guardarFechoValor', {d: $linha.attr('data-data'), campo: campo, valor: valor, editar: editar ? '1' : '0', contexto: $('#tabelaFechoValor').attr('data-contexto')}, function (r) {
         if (r.r === 0) {
             $linha.find('.atendente-fecho-valor').text(r.atendente);
             $entrada.val(valor === '' ? '0' : valor).attr('data-guardado', '1').removeAttr('data-editando').prop('disabled', false).prop('readonly', true);
@@ -368,7 +369,7 @@ function guardarFechoValorCelula($entrada) {
             listarGerirFechoValor();
         } else {
             $entrada.prop('disabled', false).prop('readonly', false);
-            alertSwal(r.r === 3 ? 'Verifique os valores inseridos.' : 'Não foi possível guardar o fecho de valor.');
+            alertSwal(r.r === 2 ? 'No Atendimento, só é permitido alterar o fecho do dia actual.' : (r.r === 3 ? 'Verifique os valores inseridos.' : 'Não foi possível guardar o fecho de valor.'));
         }
     }, false, false);
 }

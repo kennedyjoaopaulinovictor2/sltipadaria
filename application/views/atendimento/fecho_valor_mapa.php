@@ -12,7 +12,7 @@
             </div>
         </div>
         <div class="table-responsive">
-            <table class="table table-bordered table-condensed" id="tabelaFechoValor">
+            <table class="table table-bordered table-condensed" id="tabelaFechoValor" data-contexto="<?= html_escape(isset($contextoFechoValor) ? $contextoFechoValor : 'atendimento') ?>">
                 <thead>
                     <tr>
                         <th rowspan="2">Data</th>
