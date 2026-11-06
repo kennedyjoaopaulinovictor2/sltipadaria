@@ -37,7 +37,7 @@ $("#formUserPerfirEditarSenha").validate({
 $tabelaLimparListarUtilizadores = ['tabelaUtilizador', 'msgUtilizadorTabela'];
 if ($('#telefone').size() > 0) {
     $(function () {
-        $("#telefone").inputmask({"mask": "999999999"});
+        $("#telefone").inputmask({"mask": "999999999", "clearIncomplete": true});
     });
 }
 $("#modulo").change(function () {
@@ -99,6 +99,8 @@ function ocultaMostraDivsUtizador() {
     $("#pessoa").prop('disabled', false);
     $("#smsUser").prop('disabled', false);
     limparListar($tabelaLimparListarUtilizadores);
+    if ($t == 2)
+        listarUtilizadores();
 }
 function smsErroInsertUpdateUtilizador(r) {
     if (r == -5) {
@@ -113,9 +115,26 @@ function smsErroInsertUpdateUtilizador(r) {
     } else if (r == -8) {
         msgErroSpan('msgUtilizadorForm', 'warning', 'Corre&ccedil;&atilde;o 009', ' J&aacute; existe um Utilizador ligado ao &Aacute;rea de Trabalho <code>' + $('#modulo option:selected').text() + '</code> para a Pessoa  <code>' + $('#pessoa option:selected').text() + '</code>');
         $("#pessoa").focus();
+    } else if (r == -9) {
+        msgErroSpan('msgUtilizadorForm', 'danger', 'M&oacute;dulo inv&aacute;lido', 'Seleccione um acesso existente na base de dados.');
+    } else if (r == -10) {
+        msgErroSpan('msgUtilizadorForm', 'danger', 'Pessoa inv&aacute;lida', 'Actualize a p&aacute;gina e seleccione uma pessoa existente ou escolha Novo.');
+    } else if (r == -2) {
+        msgErroSpan('msgUtilizadorForm', 'warning', 'Dados inv&aacute;lidos', 'Confirme o nome, o acesso, os privil&eacute;gios e o telefone (quando informado).');
+    } else if (r == -11) {
+        msgErroSpan('msgUtilizadorForm', 'danger', 'SMS n&atilde;o confirmada', 'A conta n&atilde;o foi criada porque o servi&ccedil;o de SMS n&atilde;o confirmou o envio.');
+    } else if (r == -12) {
+        msgErroSpan('msgUtilizadorForm', 'danger', 'Modelo SMS inv&aacute;lido', 'A conta n&atilde;o foi criada porque o modelo de SMS de acesso n&atilde;o est&aacute; configurado.');
     } else {
         msgErroSpan('msgUtilizadorForm', 'danger ', 'Erro 00' + r, $msg + ' n&atilde;o Inserido');
     }
+}
+function tratarErroAcessoUtilizador(codigo) {
+    if (codigo === -21) {
+        window.location.assign(getUrl() + 'portal/login');
+        return true;
+    }
+    return false;
 }
 function insertUtilizador() {
     $msg = 'Utilizador de <code>' + $('#nome').val() + '</code> da &aacute;rea <code>' + $('#modulo option:selected').text() + '</code>';
@@ -123,6 +142,7 @@ function insertUtilizador() {
             function (r) {
                 if (r.r == 0) {
                     $nome = ($('#nome').val() + ' da &aacute;rea ' + $('#modulo option:selected').text() + '; Username: ' + r.u);
+                    $('#moduloLU').val($('#modulo').val());
                     if (r.p)
                         $('#pessoa').append('<option value="' + r.p + '">' + $('#nome').val() + '</option>');
                     $("#pessoa").val('');
@@ -134,6 +154,8 @@ function insertUtilizador() {
                     msgErroSpan('msgUtilizadorForm', 'success', 'Sucesso', $msg + ' Criado');
 //                    $('#modulo').val('').trigger('change');
                 } else {
+                    if (tratarErroAcessoUtilizador(r.r))
+                        return;
                     smsErroInsertUpdateUtilizador(r.r, $msg);
                 }
             }
@@ -160,7 +182,6 @@ function btnUpdateUtilizador($cod, $nome) {
                         $("#provUti").val(r.cod_provincia);
                     if (r.cod_municipio)
                         $("#muniUti").val(r.cod_municipio);
-                    $('#tipoUser').val(r.tipo);
                     $('#username').val(r.username);
 //                    $('#username').prop('disabled', true);
                     ocultaDivForm('divUtilizadorTable', 'msgUtilizadorTabela');
@@ -183,7 +204,11 @@ function updateUtilizador() {
                         $("#smsUser").prop('disabled', false);
                         $('#modulo').val('');
                         $('#modulo').trigger('change');
+                        ocultaMostraDivsUtizador();
+                        listarUtilizadores();
                     } else {
+                        if (tratarErroAcessoUtilizador(r.r))
+                            return;
                         smsErroInsertUpdateUtilizador(r.r, $msg);
                     }
                 }
@@ -195,11 +220,10 @@ function updateUtilizador() {
 $("#formUtilizador").validate({
     rules: {
         nome: {required: true, minlength: 5, regExNome: true},
-        telefone: {required: true, digits: true, minlength: 9, inica92: true, validaTelefone: true},
+        telefone: {required: function () { return $('#smsUser').val() === '2'; }, digits: true, minlength: 9, maxlength: 9, inica92: true, validaTelefone: true},
         email: "email",
         modulo: "required",
-        username: {minlength: 8},
-        tipoUser: "required",
+        username: {maxlength: 255},
         smsUser: "required",
         provUti: "required",
         muniUti: "required"
@@ -222,6 +246,8 @@ function deleteUtilizador($cod, $tr, $nome) {
                             $('#tabelaUtilizador').dataTable().fnDeleteRow($tr);
                             msgErroSpan('msgUtilizadorTabela', 'success', 'Sucesso', 'Utilizador <code>' + $nome + '</code> Eliminado');
                         } else {
+                            if (tratarErroAcessoUtilizador(r))
+                                return;
                             msgErroSpan('msgUtilizadorTabela', 'danger', 'Erro 00' + r, 'Utilizador <code>' + $nome + '</code> n&atilde;o Eliminado');
                         }
                     }
@@ -241,6 +267,8 @@ function updateEstadoUtilizador($cod, $id, $etado, $nome) {
                             if ($etado != '1')
                                 $('#senUti' + $id.match(/\d/g)).remove();
                         } else {
+                            if (tratarErroAcessoUtilizador(r))
+                                return;
                             msgErroSpan('msgUtilizadorTabela', 'warning', 'Falha 00' + r, 'Estado do Utilizador <code>' + $nome + '</code> n&atilde;o Alterdado');
                         }
                     }
@@ -259,8 +287,19 @@ function reporSenhaUtilizador($c, $cod) {
                         function (r) {
                             if (r == 0) {
                                 alertSwal('Sucesso! Operação Executada');
-                                $('#su' + $c).prop('disabled', true);
+                                $('#su' + $c).val('');
+                            } else if (r == -5) {
+                                alertSwal('A TelcoSMS não confirmou o envio. A senha anterior foi mantida.');
+                                $('#su' + $c).val('');
+                            } else if (r == -6) {
+                                alertSwal('Este utilizador não tem um telefone cadastrado. A senha não foi alterada.');
+                                $('#su' + $c).val('');
+                            } else if (r == -7) {
+                                alertSwal('O modelo de SMS de reposição não está configurado correctamente. A senha não foi alterada.');
+                                $('#su' + $c).val('');
                             } else {
+                                if (tratarErroAcessoUtilizador(r))
+                                    return;
                                 $('#su' + $c).val('');
                                 alertSwal('Erro ' + r + '! Operação não executada');
                             }
@@ -281,9 +320,15 @@ function listarUtilizadores() {
                 if (r.r == "0") {
                     $tabela.fnAddData(r.dados);
                 } else {
-                    msgErroSpan('msgUtilizadorTabela', 'danger', 'Erro 00' + r.r, 'Nenhum Utilizador encontrado');
+                    if (tratarErroAcessoUtilizador(parseInt(r.r, 10)))
+                        return;
+                    msgErroSpan('msgUtilizadorTabela', 'info', 'Sem resultados', 'Nenhum utilizador encontrado para os filtros seleccionados.');
                 }
-            }, true, false);
+            }, true, true,
+            function (xhr, status, error) {
+                console.error('Falha ao listar utilizadores:', status, error);
+                msgErroSpan('msgUtilizadorTabela', 'danger', 'Erro ao listar utilizadores', 'N&atilde;o foi poss&iacute;vel carregar a lista. Tente novamente.' + (xhr.status ? ' (HTTP ' + xhr.status + ')' : ''));
+            });
 }
 $('.classLU').change(function () {
     limparListar($tabelaLimparListarUtilizadores);
@@ -294,6 +339,7 @@ $('#btnLU').click(function () {
 if ($('#tabelaUtilizador').size() > 0 && $('#msgUtilizadorTabela').size() > 0) {
     $(function () {
         limparListar($tabelaLimparListarUtilizadores);
+        listarUtilizadores();
     });
 }
 

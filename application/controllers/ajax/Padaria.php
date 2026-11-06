@@ -9,9 +9,32 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  */
 class Padaria extends CI_Controller {
 
+    private $writerExportacaoCombinada = NULL;
+
     public function __construct() {
         parent::__construct();
         includeModals(array('padaria', 'configuracao'));
+    }
+
+    private function erroAcessoAdminMapas() {
+        if (empty(codUtilizador()) || userSession() !== (APP_ID_NOME . codUtilizador()))
+            return -21;
+        return userModulo() === 'ADMINISTRADOR' ? 0 : -22;
+    }
+
+    private function dataMapaValida($data) {
+        if (!is_string($data))
+            return FALSE;
+        $dataValidada = DateTime::createFromFormat('!Y-m-d', $data);
+        return $dataValidada && $dataValidada->format('Y-m-d') === $data && $data <= date('Y-m-d');
+    }
+
+    private function mesMapaValido($mes) {
+        return is_string($mes) && preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $mes) && $mes <= date('Y-m');
+    }
+
+    private function obterWriterExportacao() {
+        return ($this->writerExportacaoCombinada instanceof XLSXWriter ? $this->writerExportacaoCombinada : new XLSXWriter());
     }
 
     function addUpdateVenda() {
@@ -33,7 +56,7 @@ class Padaria extends CI_Controller {
                 $c = 0;
                 foreach ($produtos as $produto) {
                     $lista[$c++] = array('<center>' . $c . '<center>',
-                        '<div class="user-info"><img alt="" src="' . $produto['url_file'] . '" class="img-responsive" width="70" height="70" /><div class="details"><div><a href="#" id="np' . $c . '">' . $produto['nome'] . '</a></div></div></div>',
+                        '<div class="user-info"><img alt="" src="' . base_url($produto['url_file']) . '" class="img-responsive" width="70" height="70" /><div class="details"><div><a href="#" id="np' . $c . '">' . $produto['nome'] . '</a></div></div></div>',
 //                            '<div class="tile image selected"><div class="tile-body"><img src="' . $produto['url_file'] . '"  width="50" height="50"></div><div class="tile-object"><div class="name">' . $produto['nome'] . '</div></div></div>',
                         moeda_akz($produto['preco']),
                         '<span id="qh' . $c . '">' . $produto['qtdV'] . '</span>',
@@ -92,7 +115,7 @@ class Padaria extends CI_Controller {
                 $lista = array();
                 $c = $v = 0;
                 foreach ($saidas as $saida) {
-                    $lista[$c++] = array('<center>' . $c . '<center>', moeda_akz($saida['valor']), $saida['motivo'], $saida['data_cricao']);
+                    $lista[$c++] = array('<center>' . $c . '<center>', moeda_akz($saida['valor']), $saida['motivo'], $saida['data_cricao'], '');
                     $v += $saida['valor'];
                 }
                 retornAjax(array('dados' => $lista, 'r' => (!empty($lista) ? 0 : 1), 'v' => moeda_akz($v)));
@@ -105,7 +128,16 @@ class Padaria extends CI_Controller {
     function addUpdateFecho() {
         if (!empty($this->input->post('u')) && !empty($this->input->post('p')) && !empty($this->input->post('d')) && !empty($this->input->post('q'))) {
             if (isNumeric($this->input->post('u')) && isNumeric($this->input->post('p')) && isNumeric($this->input->post('q'))) {
-                $r = $this->padaria_m->insertUpdateFecho();
+                if ($this->input->post('contexto', TRUE) !== 'admin')
+                    retornAjax(array('r' => -22));
+                $erroAcesso = $this->erroAcessoAdminMapas();
+                if ($erroAcesso !== 0)
+                    retornAjax(array('r' => $erroAcesso));
+                $data = $this->input->post('d', TRUE);
+                $quantidade = $this->input->post('q', TRUE);
+                if (!$this->dataMapaValida($data) || !preg_match('/^[1-9]\d{0,3}$/', (string) $quantidade) || (int) $quantidade > 5500)
+                    retornAjax(array('r' => 3));
+                $r = $this->padaria_m->insertUpdateFechoAdmin(codUtilizador(), (int) $this->input->post('p', TRUE), $data, (int) $quantidade);
                 retornAjax(is_array($r) ? array('r' => $r[0], 'q' => $r[1]) : array('r' => $r));
             } else
                 retornAjax(array('r' => '23'));
@@ -115,7 +147,18 @@ class Padaria extends CI_Controller {
 
     public function listarGerirFecho() {
         if (!empty($this->input->post('u')) && !empty($this->input->post('d'))) {
-            $produtos = $this->padaria_m->getProdutosFecho($this->input->post('d'));
+            $contextoAdmin = $this->input->post('contexto', TRUE) === 'admin';
+            if ($contextoAdmin) {
+                $erroAcesso = $this->erroAcessoAdminMapas();
+                if ($erroAcesso !== 0)
+                    retornAjax(array('r' => $erroAcesso));
+                $data = $this->input->post('d', TRUE);
+                if (!$this->dataMapaValida($data))
+                    retornAjax(array('r' => 3));
+                $produtos = $this->padaria_m->getProdutosFechoAdmin($data);
+            } else {
+                $produtos = $this->padaria_m->getProdutosFecho($this->input->post('d'));
+            }
 
             if (!empty($produtos)) {
                 $lista = array();
@@ -124,9 +167,9 @@ class Padaria extends CI_Controller {
                 foreach ($produtos as $produto) {
                     $res = (!empty($produto['qtdP']) && $produto['qtdP'] >= $produto['qtdV'] ? $produto['qtdP'] - $produto['qtdV'] : 0);
                     $lista[$c++] = array('<center>' . $c . '<center>',
-                        '<div class="user-info"><img alt="" src="' . $produto['url_file'] . '" class="img-responsive" width="70" height="70" /><div class="details"><div><a href="#" id="np' . $c . '">' . $produto['nome'] . '</a></div></div></div>',
+                        '<div class="user-info"><img alt="" src="' . base_url($produto['url_file']) . '" class="img-responsive" width="70" height="70" /><div class="details"><div><a href="#" id="np' . $c . '">' . $produto['nome'] . '</a></div></div></div>',
                         moeda_akz($produto['preco']),
-                        ($hoje ? '<input id="qp' . $c . '" type="number" value="' . $produto['qtdP'] . '" class="form-control" min="1" max="5500" maxlength="4" onkeypress="return inputSoNumero(event)" onkeydown="if((window.event?event.keyCode:event.which)==13){updateVendaFecho(\'' . $produto['cod'] . '\',' . $c . ');}">' : $produto['qtdP']),
+                        ($hoje ? '<input id="qp' . $c . '" type="number" value="' . $produto['qtdP'] . '"' . (!$contextoAdmin ? ' disabled' : '') . ' class="form-control" min="1" max="5500" maxlength="4" onkeypress="return inputSoNumero(event)" onkeydown="if((window.event?event.keyCode:event.which)==13){updateVendaFecho(\'' . $produto['cod'] . '\',' . $c . ');}">' : $produto['qtdP']),
                         '<span id="qv' . $c . '">' . $produto['qtdV'] . '</span>',
                         '<span id="qr' . $c . '" class="text-danger">' . $res.' '. moeda_akz($res*$produto['preco']) . '</span>',
                         moeda_akz($produto['valV']),
@@ -144,6 +187,117 @@ class Padaria extends CI_Controller {
             retornAjax(array('r' => 2));
     }
 
+    public function listarMapaFecho() {
+        $erroAcesso = $this->erroAcessoAdminMapas();
+        if ($erroAcesso !== 0)
+            retornAjax(array('r' => $erroAcesso));
+
+        $mes = $this->input->post('mes', TRUE);
+        $mes = (empty($mes) ? date('Y-m') : $mes);
+        if (!$this->mesMapaValido($mes))
+            retornAjax(array('r' => 2));
+
+        $dataInicio = $mes . '-01';
+        $dataFim = date('Y-m-t', strtotime($dataInicio));
+        $registos = $this->padaria_m->getMapaMensalFecho($dataInicio, $dataFim);
+        $produtos = array();
+        $dias = array();
+        $data = new DateTime($dataInicio);
+        $ultimoDia = new DateTime($dataFim);
+        for ($dia = clone $data; $dia <= $ultimoDia; $dia->modify('+1 day'))
+            $dias[$dia->format('Y-m-d')] = array('valores' => array(), 'funcionarios' => array(), 'total' => NULL);
+
+        foreach ((array) $registos as $registo) {
+            $codProduto = $registo['cod'];
+            $produtos[$codProduto] = array('cod' => $codProduto, 'nome' => $registo['nome']);
+            if (!empty($registo['data_venda'])) {
+                $dataVenda = $registo['data_venda'];
+                $dias[$dataVenda]['valores'][$codProduto] = array(
+                    'codVenda' => $registo['cod_venda'],
+                    'produzida' => (int) $registo['qtd_produzida'],
+                    'restante' => (int) $registo['qtd_restante'],
+                    'vendida' => (int) $registo['qtd_vendida'],
+                    'total' => (float) $registo['total_vendido']
+                );
+                $dias[$dataVenda]['total'] = (float) $dias[$dataVenda]['total'] + (float) $registo['total_vendido'];
+                if (!empty($registo['funcionario']))
+                    $dias[$dataVenda]['funcionarios'][$registo['funcionario']] = $registo['funcionario'];
+            }
+        }
+
+        retornAjax(array('r' => 0, 'mes' => $mes, 'produtos' => array_values($produtos), 'dias' => $dias));
+    }
+
+    public function guardarProducaoMapa() {
+        $erroAcesso = $this->erroAcessoAdminMapas();
+        if ($erroAcesso !== 0)
+            retornAjax(array('r' => $erroAcesso));
+
+        $codProduto = $this->input->post('p', TRUE);
+        $data = $this->input->post('d', TRUE);
+        $quantidade = $this->input->post('q', TRUE);
+        if (!preg_match('/^[1-9]\d*$/', (string) $codProduto) || !$this->dataMapaValida($data) || !preg_match('/^[1-9]\d{0,3}$/', (string) $quantidade) || (int) $quantidade > 5500)
+            retornAjax(array('r' => 3));
+
+        $resultado = $this->padaria_m->insertUpdateFecho(codUtilizador(), (int) $codProduto, $data, (int) $quantidade);
+        retornAjax(array('r' => is_array($resultado) ? $resultado[0] : $resultado, 'q' => is_array($resultado) ? $resultado[1] : ''));
+    }
+
+    public function listarMapaSaidas() {
+        $erroAcesso = $this->erroAcessoAdminMapas();
+        if ($erroAcesso !== 0)
+            retornAjax(array('r' => $erroAcesso));
+
+        $mes = $this->input->post('mes', TRUE);
+        $mes = (empty($mes) ? date('Y-m') : $mes);
+        if (!$this->mesMapaValido($mes))
+            retornAjax(array('r' => 2));
+
+        $dataInicio = $mes . '-01';
+        $dataFim = date('Y-m-t', strtotime($dataInicio));
+        $registos = $this->padaria_m->getSaidasValoresMes($dataInicio, $dataFim);
+        $dias = array();
+        $data = new DateTime($dataInicio);
+        $ultimoDia = new DateTime($dataFim);
+        for ($dia = clone $data; $dia <= $ultimoDia; $dia->modify('+1 day'))
+            $dias[$dia->format('Y-m-d')] = array('data' => $dia->format('Y-m-d'), 'dataTexto' => $dia->format('d/m/Y'), 'saidas' => array(), 'total' => 0);
+
+        foreach ((array) $registos as $registo) {
+            if (!isset($dias[$registo['data_saida']]))
+                continue;
+            $dias[$registo['data_saida']]['saidas'][] = array(
+                'cod' => $registo['cod'],
+                'valor' => (float) $registo['valor'],
+                'motivo' => $registo['motivo']
+            );
+            $dias[$registo['data_saida']]['total'] += (float) $registo['valor'];
+        }
+
+        retornAjax(array('r' => 0, 'mes' => $mes, 'dias' => array_values($dias)));
+    }
+
+    public function guardarSaidaMapa() {
+        $erroAcesso = $this->erroAcessoAdminMapas();
+        if ($erroAcesso !== 0)
+            retornAjax(array('r' => $erroAcesso));
+
+        $cod = $this->input->post('cod', TRUE);
+        $motivo = trim((string) $this->input->post('m', TRUE));
+        $valor = trim((string) $this->input->post('v', TRUE));
+        if (strpos($valor, ',') !== FALSE) {
+            $valorBanco = moedaBd($valor);
+            $valorValido = preg_match('/^(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?$/', $valor);
+        } else {
+            $valorBanco = $valor;
+            $valorValido = preg_match('/^\d{1,10}(?:\.\d{1,2})?$/', $valor);
+        }
+        if (!preg_match('/^[1-9]\d*$/', (string) $cod) || $motivo === '' || !preg_match("/^[A-Za-z0-9áàâãéèêëíïîìóòôõöúçñÁÀÂÃÉÈËÍÏÎÌÓÒÔÕÖÚÇÑ\-\s]+$/", $motivo) || !$valorValido || !preg_match('/^\d{1,10}(\.\d{1,2})?$/', $valorBanco) || (float) $valorBanco <= 0)
+            retornAjax(array('r' => 3));
+
+        $resultado = $this->padaria_m->editarSaidaValor((int) $cod, filterString($motivo), $valorBanco, codUtilizador());
+        retornAjax(array('r' => $resultado));
+    }
+
     public function listarGerirFechoValor() {
         $codUtilizador = codUtilizador();
         if (empty($codUtilizador))
@@ -157,6 +311,8 @@ class Padaria extends CI_Controller {
         $dataFim = date('Y-m-t', strtotime($dataInicio));
         $registos = $this->padaria_m->getFechosValorMes($dataInicio, $dataFim);
         $campos = array('moeda_10', 'moeda_20', 'moeda_50', 'moeda_100', 'moeda_200', 'dinheiro_200', 'dinheiro_500', 'dinheiro_1000', 'dinheiro_2000', 'dinheiro_5000', 'tpa', 'notas');
+        $contexto = $this->input->post('contexto', TRUE);
+        $adminPodeEditarHistorico = $contexto === 'admin' && userModulo() === 'ADMINISTRADOR';
         $dias = array();
         $data = new DateTime($dataInicio);
         $ultimoDia = new DateTime($dataFim);
@@ -164,7 +320,8 @@ class Padaria extends CI_Controller {
         for ($dia = clone $data; $dia <= $ultimoDia; $dia->modify('+1 day')) {
             $dataDia = $dia->format('Y-m-d');
             $registo = isset($registos[$dataDia]) ? $registos[$dataDia] : array();
-            $linha = array('data' => $dataDia, 'dataTexto' => $dia->format('d/m/Y'), 'atendente' => isset($registo['atendente']) ? $registo['atendente'] : '', 'editavel' => $dataDia <= $hoje);
+            $editavel = ($adminPodeEditarHistorico ? $dataDia <= $hoje : $dataDia === $hoje);
+            $linha = array('data' => $dataDia, 'dataTexto' => $dia->format('d/m/Y'), 'atendente' => isset($registo['atendente']) ? $registo['atendente'] : '', 'editavel' => $editavel);
             $camposGuardados = isset($registo['campos_guardados']) ? explode(',', $registo['campos_guardados']) : array();
             foreach ($campos as $campo) {
                 $salvo = in_array($campo, $camposGuardados, TRUE);
@@ -185,6 +342,10 @@ class Padaria extends CI_Controller {
             retornAjax(array('r' => 2));
         $dataValidada = DateTime::createFromFormat('!Y-m-d', (string) $data);
         if (!$dataValidada || $dataValidada->format('Y-m-d') !== $data || substr($data, 0, 7) > date('Y-m') || $data > date('Y-m-d'))
+            retornAjax(array('r' => 2));
+        $contexto = $this->input->post('contexto', TRUE);
+        $adminPodeEditarHistorico = $contexto === 'admin' && userModulo() === 'ADMINISTRADOR';
+        if (!$adminPodeEditarHistorico && $data !== date('Y-m-d'))
             retornAjax(array('r' => 2));
 
         $campo = $this->input->post('campo', TRUE);
@@ -208,7 +369,7 @@ class Padaria extends CI_Controller {
 
         $editar = $this->input->post('editar', TRUE) === '1';
         $resultado = $this->padaria_m->guardarFechoValorCelula($data, $campo, $valor, $codUtilizador, $editar);
-        retornAjax(array('r' => $resultado, 'atendente' => ($resultado == 0 ? nomeUtilizador() : '')));
+        retornAjax(array('r' => $resultado));
     }
 
     public function exportarFechoValor() {
@@ -225,13 +386,17 @@ class Padaria extends CI_Controller {
         $campos = array('moeda_10', 'moeda_20', 'moeda_50', 'moeda_100', 'moeda_200', 'dinheiro_200', 'dinheiro_500', 'dinheiro_1000', 'dinheiro_2000', 'dinheiro_5000', 'tpa', 'notas');
 
         require_once FCPATH . 'excel/xlsxwriter.class.php';
-        $writer = new XLSXWriter();
+        $writer = $this->obterWriterExportacao();
         $sheet = 'Fecho de Valor';
         $tiposColuna = array('DATA' => 'string');
         foreach ($campos as $campo)
             $tiposColuna[$campo] = (in_array($campo, array('tpa', 'notas'), TRUE) ? 'price' : 'integer');
-        $tiposColuna['ATENDENTE'] = 'string';
-        $larguras = array_merge(array(15), array(12, 12, 12, 12, 12, 12, 12, 14, 14, 14, 18, 18, 24));
+        $larguras = array(15);
+        foreach ($campos as $campo)
+            $larguras[] = (in_array($campo, array('tpa', 'notas'), TRUE) ? 18 : 12);
+        $tiposColuna['TOTAL DINHEIRO'] = 'price';
+        $tiposColuna['TOTAL'] = 'price';
+        $larguras = array_merge($larguras, array(18, 18));
         $writer->writeSheetHeader($sheet, $tiposColuna, array('suppress_row' => TRUE, 'widths' => $larguras, 'freeze_rows' => 3, 'freeze_columns' => 1, 'orientation' => 'landscape', 'fit_to_page' => TRUE));
 
         $meses = array(1 => 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro');
@@ -247,15 +412,16 @@ class Padaria extends CI_Controller {
         $linhaGrupo[6] = 'DINHEIRO (CASH) KZ';
         $linhaGrupo[11] = 'TPA';
         $linhaGrupo[12] = 'NOTAS';
-        $linhaGrupo[13] = 'ATENDENTE';
+        $linhaGrupo[13] = 'TOTAL DINHEIRO';
+        $linhaGrupo[14] = 'TOTAL';
         $writer->markMergedCell($sheet, 1, 0, 2, 0);
         $writer->markMergedCell($sheet, 1, 1, 1, 5);
         $writer->markMergedCell($sheet, 1, 6, 1, 10);
-        for ($coluna = 11; $coluna <= 13; $coluna++)
+        for ($coluna = 11; $coluna <= 14; $coluna++)
             $writer->markMergedCell($sheet, 1, $coluna, 2, $coluna);
         $writer->writeSheetRow($sheet, $linhaGrupo, array('font-style' => 'bold', 'fill' => '#B4C7E7', 'halign' => 'center'));
 
-        $cabecalho = array('', '10,00', '20,00', '50,00', '100,00', '200,00', '200,00', '500,00', '1 000,00', '2 000,00', '5 000,00', '', '', '');
+        $cabecalho = array('', '10,00', '20,00', '50,00', '100,00', '200,00', '200,00', '500,00', '1 000,00', '2 000,00', '5 000,00', '', '', '', '');
         $writer->writeSheetRow($sheet, $cabecalho, array('font-style' => 'bold', 'fill' => '#D9E2F3', 'halign' => 'center'));
 
         $data = new DateTime($dataInicio);
@@ -265,13 +431,27 @@ class Padaria extends CI_Controller {
             $fecho = isset($fechos[$dataDia]) ? $fechos[$dataDia] : array();
             $camposGuardados = isset($fecho['campos_guardados']) ? explode(',', $fecho['campos_guardados']) : array();
             $linha = array($dia->format('d/m/Y'));
-            foreach ($campos as $campo)
-                $linha[] = (in_array($campo, $camposGuardados, TRUE) && isset($fecho[$campo]) ? $fecho[$campo] : '');
-            $linha[] = isset($fecho['atendente']) ? $fecho['atendente'] : '';
+            $totalDinheiro = 0;
+            $tpa = 0;
+            foreach ($campos as $campo) {
+                $guardado = in_array($campo, $camposGuardados, TRUE) && isset($fecho[$campo]);
+                $valor = ($guardado ? $fecho[$campo] : '');
+                $linha[] = $valor;
+                if ($guardado) {
+                    if ($campo === 'tpa')
+                        $tpa = (float) $valor;
+                    else
+                        $totalDinheiro += (float) $valor;
+                }
+            }
+            $linha[] = $totalDinheiro;
+            $linha[] = $totalDinheiro + $tpa;
             $writer->writeSheetRow($sheet, $linha);
         }
 
         $nomeFicheiro = 'fecho-valor-' . $mes . '.xlsx';
+        if ($this->writerExportacaoCombinada instanceof XLSXWriter)
+            return;
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="' . $nomeFicheiro . '"');
         header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -313,7 +493,7 @@ class Padaria extends CI_Controller {
         }
 
         require_once FCPATH . 'excel/xlsxwriter.class.php';
-        $writer = new XLSXWriter();
+        $writer = $this->obterWriterExportacao();
         $sheet = 'Mapa Mensal';
         $tiposColuna = array('DATA' => 'string');
         $larguras = array(14);
@@ -377,6 +557,8 @@ class Padaria extends CI_Controller {
         }
 
         $nomeFicheiro = 'mapa-fecho-' . $mes . '.xlsx';
+        if ($this->writerExportacaoCombinada instanceof XLSXWriter)
+            return;
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="' . $nomeFicheiro . '"');
         header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -411,8 +593,8 @@ class Padaria extends CI_Controller {
         }
 
         require_once FCPATH . 'excel/xlsxwriter.class.php';
-        $writer = new XLSXWriter();
-        $sheet = 'Saídas de Valores';
+        $writer = $this->obterWriterExportacao();
+        $sheet = 'Saidas de Valores';
         $tiposColuna = array('DATA' => 'string');
         $larguras = array(15);
         for ($indice = 1; $indice <= $maxSaidas; $indice++) {
@@ -472,10 +654,46 @@ class Padaria extends CI_Controller {
         }
 
         $nomeFicheiro = 'mapa-saidas-valores-' . $mes . '.xlsx';
+        if ($this->writerExportacaoCombinada instanceof XLSXWriter)
+            return;
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="' . $nomeFicheiro . '"');
         header('Cache-Control: no-store, no-cache, must-revalidate');
         $writer->writeToStdOut();
+        exit;
+    }
+
+    public function exportarTodosMapas() {
+        $erroAcesso = $this->erroAcessoAdminMapas();
+        if ($erroAcesso === -21)
+            show_error('Sessão expirada. Entre novamente na aplicação.', 403);
+        if ($erroAcesso === -22)
+            show_error('Sem permissão para exportar mapas.', 403);
+
+        $mes = $this->input->get('mes', TRUE);
+        if (!$this->mesMapaValido($mes))
+            show_error('Mês inválido.', 400);
+        require_once FCPATH . 'excel/xlsxwriter.class.php';
+        $this->writerExportacaoCombinada = new XLSXWriter();
+        $this->exportarFechoValor();
+        $this->exportarMapaFecho();
+        $this->exportarMapaSaidasValores();
+
+        $conteudo = $this->writerExportacaoCombinada->writeToString();
+        if (!is_string($conteudo) || $conteudo === '')
+            show_error('Não foi possível gerar o ficheiro Excel com os três mapas.', 500);
+
+        $meses = array(
+            1 => 'Janeiro', 'Fevereiro', 'Março', 'Abril',
+            'Maio', 'Junho', 'Julho', 'Agosto',
+            'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        );
+        $nomeFicheiro = 'Mapas-' . $meses[(int) substr($mes, 5, 2)] . '-' . substr($mes, 0, 4) . '.xlsx';
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $nomeFicheiro . '"');
+        header('Content-Length: ' . strlen($conteudo));
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        echo $conteudo;
         exit;
     }
 }

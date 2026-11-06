@@ -433,14 +433,69 @@ function rand_number($length) {
 }
 
 function enviarSMS($fone, $sms, $tipoSms, $codE, $anoL = '') {
+    $instance = get_instance();
+    if (!function_exists('curl_init')) {
+        $code = '600-cURL indisponível';
+        $logged = $instance->configuracao_m->insertSmsEnviada($sms, $fone, $tipoSms, $code, $codE, $anoL);
+        return array('success' => false, 'code' => $code, 'logged' => $logged);
+    }
+
+    $payload = json_encode(array(
+        'message' => array(
+            'api_key_app' => 'prd9d250f71d22f882d4ae7009171',
+            'phone_number' => (string) $fone,
+            'message_body' => (string) $sms
+        )
+    ));
+    if ($payload === false) {
+        $code = '600-JSON inválido';
+        $logged = $instance->configuracao_m->insertSmsEnviada($sms, $fone, $tipoSms, $code, $codE, $anoL);
+        return array('success' => false, 'code' => $code, 'logged' => $logged);
+    }
+
     $curl = curl_init();
-    curl_setopt_array($curl, array(CURLOPT_URL => 'https://telcosms.co.ao/send_message', CURLOPT_RETURNTRANSFER => true, CURLOPT_ENCODING => '', CURLOPT_MAXREDIRS => 10, CURLOPT_TIMEOUT => 0, CURLOPT_FOLLOWLOCATION => true, CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1, CURLOPT_CUSTOMREQUEST => 'POST', CURLOPT_POSTFIELDS => '{"message":{"api_key_app" : "prddb64a0a4d31b02bcc3473c23e3","phone_number" : "' . $fone . '","message_body" : "' . $sms . '"}}', CURLOPT_HTTPHEADER => array('Content-Type: application/json')));
+    if ($curl === false) {
+        $code = '600-cURL indisponível';
+        $logged = $instance->configuracao_m->insertSmsEnviada($sms, $fone, $tipoSms, $code, $codE, $anoL);
+        return array('success' => false, 'code' => $code, 'logged' => $logged);
+    }
+    curl_setopt_array($curl, array(
+        CURLOPT_URL => 'https://telcosms.co.ao/send_message',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_ENCODING => '',
+        CURLOPT_MAXREDIRS => 5,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_HTTPHEADER => array('Content-Type: application/json')
+    ));
     $response = curl_exec($curl);
+    $curlError = curl_error($curl);
+    $httpStatus = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
     curl_close($curl);
-    $ret = json_decode($response, true);
-    $e = (isset($ret['error_code']) ? $ret['error_code'] . '-' . $ret['error_message'] : '600-Erro Desconhecido');
-    $s = get_instance()->configuracao_m->insertSmsEnviada($sms, $fone, $tipoSms, $e, $codE, $anoL);
-    return array($e, $s);
+    $ret = (is_string($response) ? json_decode($response, true) : NULL);
+    if ($response === false) {
+        $code = '600-' . ($curlError !== '' ? $curlError : 'Falha de comunicação');
+        $success = false;
+    } elseif ($httpStatus < 200 || $httpStatus >= 300) {
+        $code = '600-HTTP ' . $httpStatus;
+        $success = false;
+    } elseif (!is_array($ret) || !isset($ret['error_code'])) {
+        $code = '600-Resposta inválida da TelcoSMS';
+        $success = false;
+    } else {
+        $providerCode = (string) $ret['error_code'];
+        $providerMessage = (isset($ret['error_message']) ? (string) $ret['error_message'] : '');
+        $code = $providerCode . ($providerMessage !== '' ? '-' . $providerMessage : '');
+        $success = ($providerCode === '200');
+    }
+    $logged = $instance->configuracao_m->insertSmsEnviada($sms, $fone, $tipoSms, $code, $codE, $anoL);
+    if (!$logged)
+        log_message('error', 'Não foi possível registar o resultado do envio de SMS.');
+    return array('success' => $success, 'code' => $code, 'logged' => $logged);
 }
 
 function curlPost($url, $file) {

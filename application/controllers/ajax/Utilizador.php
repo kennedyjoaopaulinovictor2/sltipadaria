@@ -9,6 +9,12 @@ class Utilizador extends CI_Controller {
         includeModals(array('utilizador', 'configuracao'));
     }
 
+    private function autorizadoGestaoUtilizadores() {
+        return !empty(codUtilizador())
+                && userSession() === (APP_ID_NOME . codUtilizador())
+                && userModulo() === 'ADMINISTRADOR';
+    }
+
     public function efetuarLogin() {
         if (!empty($this->input->post('username')) && !empty($this->input->post('password'))) {
             $u = $this->utilizador_m->login($this->input->post('username'), $this->input->post('password'));
@@ -46,6 +52,8 @@ class Utilizador extends CI_Controller {
     }
 
     public function validaTelefone() {
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(-21);
         if (!empty($this->input->post('dado'))) {
             retornAjax($this->utilizador_m->checkInTelefone($this->input->post('dado'), $this->input->post('cod')));
         } else {
@@ -62,6 +70,8 @@ class Utilizador extends CI_Controller {
     }
 
     public function buscarPessoa() {
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(4);
         if ($this->input->post('cod')) {
             echo retornAjax($this->utilizador_m->getPessoa('nome,telefone,email', $this->input->post('cod')));
         } else {
@@ -70,15 +80,29 @@ class Utilizador extends CI_Controller {
     }
 
     public function listarUtilizador() {
-        if (!empty(codUtilizador()) && !empty($this->input->post('m')) && !empty($this->input->post('e'))) {
-            $utilizadores = $this->utilizador_m->getUtilizadores($this->input->post('m'), $this->input->post('e'));
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(array('r' => -21));
+        $modulo = $this->input->post('m', TRUE);
+        $estado = $this->input->post('e', TRUE);
+        if (is_numeric($modulo) && in_array($estado, array('all', '1', '2'), TRUE)) {
+            $utilizadores = $this->utilizador_m->getUtilizadores($modulo, $estado);
             if ($utilizadores) {
                 $lista = array();
                 $c = 0;
                 $optionsSenha = optionSelect(array('#', '1_Repor Senha Padrão', '2_Repor Senha e Enviar'));
                 foreach ($utilizadores as $utilizador) {
                     $aler = '<span id="e' . $c . '" onclick="updateEstadoUtilizador(\'' . $utilizador['cod'] . '\',\'e' . $c . '\',\'' . $utilizador['estado'] . '\',\'' . $utilizador['nome'] . '\');" style="cursor: pointer;"';
-                    $lista[$c++] = array("<center>" . ($c) . "</center>", '<span title="Utilizador: ' . $utilizador['username'] . ' - ' . ($utilizador['tipo'] == 2 ? 'Director' : 'T&eacute;cnico') . '">' . $utilizador['nome'] . '</span>', $utilizador['telefone'], (!empty($utilizador['provincia']) ? $utilizador['provincia'] : (!empty($utilizador['municipio']) ? $utilizador['municipio'] : $utilizador['modulo'])), ($utilizador['estado'] != '1' ? $aler . ' title="Clique para Activar" class="label label-danger">Inativo' : $aler . ' title="Clique para Desactivar" class="label label-success">Activo'), ($utilizador['estado'] == '1' ? '<select class="form-control input-sm" id="su' . $c . '" onchange="reporSenhaUtilizador(\'' . $c . '\',\'' . $utilizador['cod'] . '\');">' . $optionsSenha . '</select>' : ''), ("<center>" . (($this->input->post('m') != 2 ? (spanActionTable(1, 'btnUpdateUtilizador(\'' . $utilizador['cod'] . '\',\'' . $utilizador['nome'] . '\')') . spanActionTable(2, 'deleteUtilizador(\'' . $utilizador['cod'] . '\',\'' . ($c - 1) . '\',\'' . $utilizador['nome'] . '\')')) : '')) . "</center>"));
+                    $estadoHtml = ($utilizador['cod'] == '1'
+                            ? '<span class="label label-success">Activo</span>'
+                            : ($utilizador['estado'] != '1' ? $aler . ' title="Clique para Activar" class="label label-danger">Inativo</span>' : $aler . ' title="Clique para Desactivar" class="label label-success">Activo</span>'));
+                    $operacoes = ($utilizador['cod'] != '1'
+                            ? spanActionTable(1, 'btnUpdateUtilizador(\'' . $utilizador['cod'] . '\',\'' . $utilizador['nome'] . '\')')
+                                    . spanActionTable(2, 'deleteUtilizador(\'' . $utilizador['cod'] . '\',\'' . $c . '\',\'' . $utilizador['nome'] . '\')')
+                            : '');
+                    $senhaHtml = ($utilizador['estado'] == '1' && $utilizador['cod'] != '1'
+                            ? '<select class="form-control input-sm" id="su' . ($c + 1) . '" onchange="reporSenhaUtilizador(\'' . ($c + 1) . '\',\'' . $utilizador['cod'] . '\');">' . $optionsSenha . '</select>'
+                            : '');
+                    $lista[$c++] = array("<center>" . ($c) . "</center>", '<span title="Utilizador: ' . $utilizador['username'] . '">' . $utilizador['nome'] . '</span>', $utilizador['telefone'], $utilizador['modulo'], $estadoHtml, $senhaHtml, "<center>" . $operacoes . "</center>");
                 }
                 retornAjax(array('dados' => $lista, 'r' => (!empty($lista) ? 0 : 4)));
             } else
@@ -88,6 +112,8 @@ class Utilizador extends CI_Controller {
     }
 
     public function buscaOptionMunicipios() {
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(array('r' => -21));
         if ($this->input->post('p')) {
             $munin = $this->utilizador_m->getMunicipiosUtilizador($this->input->post('p'));
             retornAjax(array('r' => (!empty($munin) ? 0 : -1), 'select' => (!empty($munin) ? optionSelectEntidade($munin, array('cod', 'nome')) : '')));
@@ -97,7 +123,14 @@ class Utilizador extends CI_Controller {
     }
 
     public function addUtilizador() {
-        if (($this->input->post('pessoa') == '' || intval($this->input->post('pessoa'))) && !empty($this->input->post('nome')) && !empty($this->input->post('telefone')) && !empty($this->input->post('modulo')) && in_array($this->input->post('tipoUser'), array('1', '2')) && in_array($this->input->post('smsUser'), array('1', '2'))) {
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(array('r' => -21));
+        if (($this->input->post('pessoa') == '' || isNumeric($this->input->post('pessoa')))
+                && strlen(trim((string) $this->input->post('nome'))) >= 5
+                && (empty($this->input->post('telefone')) || preg_match('/^[92][0-9]{8}$/', $this->input->post('telefone')))
+                && ($this->input->post('smsUser') != '2' || !empty($this->input->post('telefone')))
+                && isNumeric($this->input->post('modulo'))
+                && in_array($this->input->post('smsUser'), array('1', '2'), TRUE)) {
             $r = $this->utilizador_m->insertUtilizador();
             retornAjax(is_array($r) ? array('r' => 0, 'p' => $r[1], 'u' => $r[0]) : array('r' => $r));
         } else {
@@ -106,6 +139,8 @@ class Utilizador extends CI_Controller {
     }
 
     public function buscarUtilizador() {
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(4);
         if (intval($this->input->post('cod'))) {
             $r = $this->utilizador_m->getUtilizador('p.cod as codPessoa,p.nome,p.telefone,p.email,u.cod_modulo,u.username,u.tipo,u.cod_provincia,u.cod_municipio', $this->input->post('cod'));
             retornAjax($r);
@@ -115,7 +150,13 @@ class Utilizador extends CI_Controller {
     }
 
     public function editarUtilizador() {
-        if (isNumeric($this->input->post('codUtilizador')) && isNumeric($this->input->post('codPEdit')) && !empty($this->input->post('nome')) && !empty($this->input->post('telefone')) && !empty($this->input->post('modulo')) && in_array($this->input->post('tipoUser'), array('1', '2'))) {
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(array('r' => -21));
+        if (isNumeric($this->input->post('codUtilizador')) && $this->input->post('codUtilizador') != '1'
+                && isNumeric($this->input->post('codPEdit'))
+                && strlen(trim((string) $this->input->post('nome'))) >= 5
+                && (empty($this->input->post('telefone')) || preg_match('/^[92][0-9]{8}$/', $this->input->post('telefone')))
+                && isNumeric($this->input->post('modulo'))) {
             retornAjax(array('r' => $this->utilizador_m->updateUtilizador()));
         } else {
             retornAjax(array('r' => -21));
@@ -123,6 +164,8 @@ class Utilizador extends CI_Controller {
     }
 
     public function apagarUtilizador() {
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(-21);
         if ($this->input->post('cod')) {
             retornAjax($this->utilizador_m->deleteUtilizador($this->input->post('cod')));
         } else
@@ -130,6 +173,8 @@ class Utilizador extends CI_Controller {
     }
 
     public function editarEstadoUtilizador() {
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(-21);
         if ($this->input->post('cod') && $this->input->post('estado')) {
             retornAjax($this->utilizador_m->updateEstadoUtilizador($this->input->post('cod'), $this->input->post('estado')));
         } else {
@@ -138,6 +183,8 @@ class Utilizador extends CI_Controller {
     }
 
     public function reporSenhaUtilizador() {
+        if (!$this->autorizadoGestaoUtilizadores())
+            retornAjax(-21);
         if (!empty($this->input->post('cod')) && !empty($this->input->post('sen'))) {
             if (isNumeric($this->input->post('cod')) && in_array($this->input->post('sen'), array('1', '2'))) {
                 retornAjax($this->utilizador_m->updateSenhaUtilizador($this->input->post('cod'), $this->input->post('sen')));

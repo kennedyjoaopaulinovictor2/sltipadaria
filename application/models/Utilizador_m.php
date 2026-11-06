@@ -14,7 +14,13 @@ class Utilizador_m extends CI_Model {
     }
 
     public function checkInTelefone($num, $cod = '') {
-        $query = $this->db->query("SELECT cod FROM pessoa WHERE " . (!empty($cod) ? ("cod!=" . $cod . " AND ") : "") . $this->db->escape($num) . " IN(telefone)");
+        $sql = "SELECT cod FROM pessoa WHERE telefone=?";
+        $params = array($num);
+        if (!empty($cod)) {
+            $sql .= " AND cod<>?";
+            $params[] = $cod;
+        }
+        $query = $this->db->query($sql, $params);
         return ($query->num_rows() > 0 ? 1 : 0);
     }
 
@@ -59,7 +65,7 @@ class Utilizador_m extends CI_Model {
     }
 
     public function getPessoas($column) {
-        $query = $this->db->query("SELECT $column FROM pessoa p JOIN utilizador u ON u.cod_pessoa=p.cod WHERE u.cod_modulo!=2 AND u.cod!=1 ORDER BY p.nome");
+        $query = $this->db->query("SELECT DISTINCT $column FROM pessoa p ORDER BY p.nome");
         return ($query->num_rows() > 0 ? $query->result() : NULL);
     }
 
@@ -71,7 +77,13 @@ class Utilizador_m extends CI_Model {
     }
 
     public function getUtilizadores($m, $e) {
-        $query = $this->db->query("SELECT u.cod, p.nome, p.telefone, u.estado, u.username, u.tipo, mo.nome modulo, pr.nome provincia, CONCAT(pm.nome,' ',m.nome) municipio FROM utilizador u JOIN modulo mo ON mo.cod=u.cod_modulo JOIN pessoa p ON p.cod=u.cod_pessoa LEFT JOIN app_cidade pr ON pr.cod=u.cod_provincia LEFT JOIN app_cidade m ON m.cod=u.cod_municipio LEFT JOIN app_cidade pm ON pm.cod=m.cod_provincia WHERE u.eliminado='0' AND u.cod!='1' AND u.cod_modulo=$m AND u.estado=$e ORDER BY p.nome");
+        $sql = "SELECT u.cod, p.nome, p.telefone, u.estado, u.username, u.tipo, mo.nome modulo FROM utilizador u JOIN modulo mo ON mo.cod=u.cod_modulo JOIN pessoa p ON p.cod=u.cod_pessoa WHERE u.eliminado='0' AND u.cod_modulo=?";
+        $params = array($m);
+        if ($e !== 'all') {
+            $sql .= " AND u.estado=?";
+            $params[] = $e;
+        }
+        $query = $this->db->query($sql . " ORDER BY p.nome", $params);
         return ($query->num_rows() > 0 ? $query->result_array() : NULL);
     }
 
@@ -85,33 +97,124 @@ class Utilizador_m extends CI_Model {
     }
 
     public function checkInsertUpdateUtilizador($cod = '', $telefone = '', $email = '', $username = '', $codP = '', $codM = '') {
-        $user = $this->db->query("SELECT u.cod,p.email,p.telefone,u.username,cod_pessoa,cod_modulo FROM utilizador u JOIN pessoa p ON p.cod=u.cod_pessoa WHERE" . (!empty($cod) ? " u.cod!=$cod AND" : "") . " (" . ("p.telefone=" . $this->db->escape($telefone)) . (!empty($email) ? " OR p.email=" . $this->db->escape($email) : "") . (!empty($username) ? " OR u.username=" . $this->db->escape($username) : "") . (!empty($codP) ? " OR (cod_pessoa=$codP AND cod_modulo=$codM)" : "") . ") LIMIT 1");
-        if ($user->num_rows() > 0)
-            return ((!empty($username) && $user->username == $username) ? -5 : (!empty($telefone) && $user->telefone == $telefone ? -6 : (!empty($email) && $user->email == $email ? -7 : ((!empty($codP) && !empty($codM) && $user->cod_pessoa == $codP && $user->cod_modulo == $codM) ? -8 : 1))));
+        if (!empty($username)) {
+            $usernameQuery = $this->db->query(
+                    "SELECT cod FROM utilizador WHERE username=? " . (!empty($cod) ? "AND cod<>? " : "") . "LIMIT 1",
+                    (!empty($cod) ? array($username, $cod) : array($username))
+            );
+            if ($usernameQuery->num_rows() > 0)
+                return -5;
+        }
+
+        $checks = array();
+        $params = array();
+        if (!empty($telefone)) {
+            $checks[] = 'p.telefone=?';
+            $params[] = $telefone;
+        }
+        if (!empty($email)) {
+            $checks[] = 'p.email=?';
+            $params[] = $email;
+        }
+        if (!empty($codP) && !empty($codM)) {
+            $checks[] = '(u.cod_pessoa=? AND u.cod_modulo=?)';
+            $params[] = $codP;
+            $params[] = $codM;
+        }
+        if (empty($checks))
+            return 1;
+
+        $where = (!empty($cod) ? 'u.cod<>? AND ' : '') . '(' . implode(' OR ', $checks) . ')';
+        if (!empty($cod))
+            array_unshift($params, $cod);
+        $query = $this->db->query("SELECT u.cod,p.email,p.telefone,u.username,u.cod_pessoa,u.cod_modulo FROM utilizador u JOIN pessoa p ON p.cod=u.cod_pessoa WHERE u.eliminado='0' AND $where", $params);
+        foreach ($query->result() as $user) {
+            if (!empty($codP) && !empty($codM) && $user->cod_pessoa == $codP && $user->cod_modulo == $codM)
+                return -8;
+            if (!empty($telefone) && $user->telefone == $telefone && (empty($codP) || $user->cod_pessoa != $codP))
+                return -6;
+            if (!empty($email) && $user->email == $email && (empty($codP) || $user->cod_pessoa != $codP))
+                return -7;
+        }
         return 1;
     }
 
     public function insertUtilizador() {
-        $r = $this->checkInsertUpdateUtilizador('', filterString($this->input->post('telefone')), (!empty($this->input->post('email')) ? filterString($this->input->post('email')) : ''), (!empty($this->input->post('username')) ? filterString($this->input->post('username')) : ''));
-        if ($r == 1) {
-            $this->db->trans_start();
-            $pessoa = array('nome' => filterString($this->input->post('nome')), 'telefone' => $this->input->post('telefone'), 'email' => (!empty($this->input->post('email')) ? $this->input->post('email') : NULL));
-            ($this->input->post('pessoa') ? $this->db->update('pessoa', $pessoa, "cod=" . $this->input->post('pessoa')) : $this->db->insert('pessoa', $pessoa));
-            $codP = ($this->input->post('pessoa') ? $this->input->post('pessoa') : $this->db->insert_id());
-            $username = (!empty($this->input->post('username')) ? filterString($this->input->post('username')) : NULL);
-            if ($codP) {
-                $senha = ($this->input->post('smsUser') == 2 ? rand_string(8) : '12345678');
-                $this->db->insert('utilizador', array('username' => $username, 'password' => encryptor($senha), 'tipo' => $this->input->post('tipoUser'), 'cod_pessoa' => $codP, 'cod_modulo' => $this->input->post('modulo'), 'cod_provincia' => (!empty($this->input->post('provUti')) ? $this->input->post('provUti') : NULL), 'cod_municipio' => (!empty($this->input->post('muniUti')) ? $this->input->post('muniUti') : NULL)));
-                if (empty($username)) {
-                    $username = (strlen((string) $this->db->insert_id()) >= 8 ? $this->db->insert_id() : (rand_number(8 - strlen((string) $this->db->insert_id())) . '' . $this->db->insert_id()));
-                    $this->db->update('utilizador', array('username' => $username), 'cod=' . $this->db->insert_id());
-                }
-                if ($this->input->post('smsUser') == 2)
-                    enviarSMS(filterString($this->input->post('telefone')), strReplaceTextSMS(buscaSmsTipo(1), array('$login_Utilizador: ' . $username . '\nSenha: ' . $senha)), '1', codUtilizador());
-            }
-            $r = ($this->db->trans_complete() ? array($username, $this->input->post('pessoa') ? '' : $codP) : 0);
+        $pessoaSelecionada = $this->input->post('pessoa');
+        $modulo = $this->input->post('modulo');
+        $telefone = trim((string) $this->input->post('telefone'));
+        $email = trim((string) $this->input->post('email'));
+        $username = trim((string) $this->input->post('username'));
+        if (!$this->db->where('cod', $modulo)->count_all_results('modulo'))
+            return -9;
+        if (!empty($pessoaSelecionada) && !$this->db->where('cod', $pessoaSelecionada)->count_all_results('pessoa'))
+            return -10;
+        if ($telefone !== '' && $this->checkInTelefone($telefone, $pessoaSelecionada) !== 0)
+            return -6;
+        $r = $this->checkInsertUpdateUtilizador('', filterString($telefone), ($email !== '' ? filterString($email) : ''), ($username !== '' ? filterString($username) : ''), $pessoaSelecionada, $modulo);
+        if ($r != 1)
+            return $r;
+
+        $this->db->trans_begin();
+        $pessoa = array('nome' => filterString($this->input->post('nome')), 'telefone' => ($telefone !== '' ? $telefone : NULL), 'email' => ($email !== '' ? $email : NULL));
+        if ($pessoaSelecionada) {
+            $pessoaGuardada = $this->db->update('pessoa', $pessoa, array('cod' => $pessoaSelecionada));
+            $codP = $pessoaSelecionada;
+        } else {
+            $pessoaGuardada = $this->db->insert('pessoa', $pessoa);
+            $codP = $this->db->insert_id();
         }
-        return $r;
+        if (!$pessoaGuardada || !$codP || !$this->db->trans_status()) {
+            $this->db->trans_rollback();
+            return 0;
+        }
+
+        $senha = ($this->input->post('smsUser') == 2 ? rand_string(8) : '12345678');
+        $username = ($username !== '' ? filterString($username) : NULL);
+        $utilizadorGuardado = $this->db->insert('utilizador', array(
+            'username' => $username,
+            'password' => encryptor($senha),
+            'cod_pessoa' => $codP,
+            'cod_modulo' => $modulo
+        ));
+        if (!$utilizadorGuardado || !$this->db->trans_status()) {
+            $this->db->trans_rollback();
+            return -5;
+        }
+
+        $codUtilizadorNovo = $this->db->insert_id();
+        if (empty($username)) {
+            $username = 'u' . str_pad((string) $codUtilizadorNovo, 7, '0', STR_PAD_LEFT);
+            if (!$this->db->update('utilizador', array('username' => $username), array('cod' => $codUtilizadorNovo))
+                    || !$this->db->trans_status()) {
+                $this->db->trans_rollback();
+                return -5;
+            }
+        }
+
+        if ($this->input->post('smsUser') == 2) {
+            $smsTexto = $this->configuracao_m->getTextSmsByTipo(2);
+            if (empty($smsTexto) || strpos($smsTexto, '$user') === false || strpos($smsTexto, '$pass') === false) {
+                $this->db->trans_rollback();
+                return -12;
+            }
+            $smsTexto = str_replace(array('$user', '$pass'), array((string) $username, $senha), $smsTexto);
+            $sms = enviarSMS($telefone, $smsTexto, '1', NULL);
+            if (empty($sms['success'])) {
+                $this->db->trans_rollback();
+                $this->configuracao_m->insertSmsEnviada($smsTexto, $telefone, '1', $sms['code'], NULL);
+                log_message('error', 'Criação de utilizador: TelcoSMS rejeitou ou não confirmou o envio (código ' . $sms['code'] . ').');
+                return -11;
+            }
+        }
+
+        if (!$this->db->trans_status()) {
+            $this->db->trans_rollback();
+            return 0;
+        }
+        if (!$this->db->trans_commit())
+            return 0;
+        return array($username, ($pessoaSelecionada ? '' : $codP));
     }
 
     public function getUtilizador($column, $cod) {
@@ -120,31 +223,79 @@ class Utilizador_m extends CI_Model {
     }
 
     public function updateUtilizador() {
-        $r = $this->checkInsertUpdateUtilizador($this->input->post('codUtilizador'), filterString($this->input->post('telefone')), (!empty($this->input->post('email')) ? filterString($this->input->post('email')) : ''), (!empty($this->input->post('username')) ? filterString($this->input->post('username')) : ''));
+        $codUtilizador = $this->input->post('codUtilizador');
+        $codPessoa = $this->input->post('codPEdit');
+        $modulo = $this->input->post('modulo');
+        $telefone = trim((string) $this->input->post('telefone'));
+        $email = trim((string) $this->input->post('email'));
+        $username = trim((string) $this->input->post('username'));
+        if (!$this->db->where('cod', $modulo)->count_all_results('modulo')
+                || !$this->db->where('cod', $codPessoa)->count_all_results('pessoa'))
+            return -10;
+        if ($telefone !== '' && $this->checkInTelefone($telefone, $codPessoa) !== 0)
+            return -6;
+        $r = $this->checkInsertUpdateUtilizador($codUtilizador, filterString($telefone), ($email !== '' ? filterString($email) : ''), ($username !== '' ? filterString($username) : ''), $codPessoa, $modulo);
         if ($r == 1) {
-            $this->db->update('pessoa', array('nome' => filterString($this->input->post('nome')), 'telefone' => $this->input->post('telefone'), 'email' => (!empty($this->input->post('email')) ? $this->input->post('email') : NULL)), "cod=" . $this->input->post('codPEdit'));
-            $this->db->update('utilizador', array('username' => $this->input->post('username'), 'tipo' => $this->input->post('tipoUser'), 'cod_modulo' => $this->input->post('modulo'), 'cod_provincia' => (!empty($this->input->post('provUti')) ? $this->input->post('provUti') : NULL), 'cod_municipio' => (!empty($this->input->post('muniUti')) ? $this->input->post('muniUti') : NULL)), "cod=" . $this->input->post('codUtilizador'));
-            $r = 0;
+            $this->db->trans_begin();
+            $pessoaAtualizada = $this->db->update('pessoa', array('nome' => filterString($this->input->post('nome')), 'telefone' => ($telefone !== '' ? $telefone : NULL), 'email' => ($email !== '' ? $email : NULL)), array('cod' => $codPessoa));
+            $utilizadorAtualizado = $this->db->update('utilizador', array('username' => ($username !== '' ? filterString($username) : NULL), 'cod_modulo' => $modulo, 'cod_provincia' => (!empty($this->input->post('provUti')) ? $this->input->post('provUti') : NULL), 'cod_municipio' => (!empty($this->input->post('muniUti')) ? $this->input->post('muniUti') : NULL)), array('cod' => $codUtilizador));
+            $r = ($pessoaAtualizada && $utilizadorAtualizado && $this->db->trans_status() ? ($this->db->trans_commit() ? 0 : 1) : 1);
+            if ($r !== 0)
+                $this->db->trans_rollback();
         }
         return $r;
     }
 
     public function deleteUtilizador($cod) {
-        return $this->db->update('utilizador', array('eliminado' => '1', 'estado' => '2'), "cod=" . $cod) ? 1 : 0;
+        return $this->db->update('utilizador', array('eliminado' => '1', 'estado' => '2'), array('cod' => $cod, 'cod !=' => '1')) ? 1 : 0;
     }
 
     public function updateEstadoUtilizador($cod, $estado) {
-        return $this->db->update('utilizador', array('estado' => ($estado == '1' ? '2' : '1')), "cod=" . $cod) ? 1 : 0;
+        return $this->db->update('utilizador', array('estado' => ($estado == '1' ? '2' : '1')), array('cod' => $cod, 'cod !=' => '1')) ? 1 : 0;
     }
 
     public function updateSenhaUtilizador($cod, $sen) {
-        $user = $this->db->query("SELECT u.cod,u.username,p.telefone FROM utilizador u JOIN pessoa p ON p.cod=u.cod_pessoa WHERE u.cod=$cod LIMIT 1");
+        $user = $this->db->query("SELECT u.cod,u.username,u.password,p.telefone FROM utilizador u JOIN pessoa p ON p.cod=u.cod_pessoa WHERE u.cod=? AND u.cod!='1' AND u.eliminado='0' LIMIT 1", array($cod));
         if ($user->num_rows() > 0) {
             $senha = ($sen == 2 ? rand_string(8) : '12345678');
-            $r = $this->db->update('utilizador', array('password' => encryptor($senha)), "cod=" . $user->row()->cod) ? 1 : 0;
-            if ($sen == 2)
-                enviarSMS($user->row()->telefone, strReplaceTextSMS(buscaSmsTipo(1), array('$login_utilizador: ' . $user->row()->username . '\nsenha: ' . $senha)), '1', codUtilizador());
-            return ($r == 1 ? 0 : -1);
+            $smsTexto = NULL;
+            if ($sen == 2) {
+                if (empty($user->row()->telefone))
+                    return -6;
+                $smsTexto = $this->configuracao_m->getTextSmsByTipo(2);
+                if (empty($smsTexto) || strpos($smsTexto, '$user') === false || strpos($smsTexto, '$pass') === false)
+                    return -7;
+                $smsTexto = str_replace(
+                        array('$user', '$pass'),
+                        array((string) $user->row()->username, $senha),
+                        $smsTexto
+                );
+            }
+
+            $this->db->trans_begin();
+            if (!$this->db->update('utilizador', array('password' => encryptor($senha)), array('cod' => $user->row()->cod))
+                    || !$this->db->trans_status()) {
+                $this->db->trans_rollback();
+                return -1;
+            }
+            if ($sen == 2) {
+                $sms = enviarSMS($user->row()->telefone, $smsTexto, '1', NULL);
+                if (empty($sms['success'])) {
+                    $restored = $this->db->update('utilizador', array('password' => $user->row()->password), array('cod' => $user->row()->cod));
+                    if (!$restored || !$this->db->trans_status()) {
+                        $this->db->trans_rollback();
+                        return -1;
+                    }
+                    $this->db->trans_commit();
+                    log_message('error', 'Reposição de senha: TelcoSMS rejeitou ou não confirmou o envio (código ' . $sms['code'] . ').');
+                    return -5;
+                }
+            }
+            if (!$this->db->trans_status()) {
+                $this->db->trans_rollback();
+                return -1;
+            }
+            return ($this->db->trans_commit() ? 0 : -1);
         }
         return -4;
     }

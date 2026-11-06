@@ -3,129 +3,159 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Other/javascript.js to edit this template
  */
 
-/* GERIR PLANOS */
-function buscarOptionsPlanosConfig($idSele, $codC, $tipo = 1) {
-    document.getElementById($idSele).innerHTML = ($tipo == 2 ? '<option value="">Selecione</option>' : '');
-    ajaxApp(
-            'plano/buscarOptionsPlanos', "c=" + $codC,
-            function (r) {
-                if (r.r !== 0) {
-                    alertSwal('Erro 00' + r.r + '! Planos Não Encontrados.');
-                } else {
-                    document.getElementById($idSele).innerHTML += r.select;
-                }
-            }, false, false);
+$tabelaLimparListarProdutos = ['tabelaProduto', 'msgProdutoTabela'];
+
+function mostrarFormularioProduto() {
+    $('#divProdutoTabela').hide();
+    $('#divProdutoForm').show();
+    $('#msgProdutoForm').empty();
+    $('html, body').animate({scrollTop: 0}, 'slow');
 }
-$('#notaCur').change(function () {
-    $('#codCur').focus();
-});
-function insertCurriculo() {
-    ajaxApp(
-            'plano/addCurriculo', $('#formCurriculo').serialize(),
-            function (r) {
-                $smsPlano = 'Plano de Estudo <code>' + $('#discCur option:selected').text() + '</code> - <code>' + $('#classeCur option:selected').text() + '</code> - <code>' + $('#notaCur option:selected').text() + '</code> C&oacute;digo <code>' + $('#codigoCur').val() + '</code>';
-                if (r.r == 0) {
-                    msgErroSpan('msgCurriculoForm', 'success', 'Sucesso', $smsPlano + ' Criado');
-                    $('#discCur').val('');
-                    $('#codCur').val('');
-                } else if (r.r == -5) {
-                    msgErroSpan('msgCurriculoForm', 'warning', 'Corre&ccedil;&atilde;o 005', 'J&aacute; existe a ' + $smsPlano);
-                } else {
-                    msgErroSpan('msgCurriculoForm', 'danger ', 'Erro 00' + r.r, $smsPlano + ' n&atilde;o Criado');
-                }
-            });
+
+function cancelarFormularioProduto() {
+    $('#formProduto')[0].reset();
+    $('#codProduto').val('');
+    $('#imagemProdutoPreview').attr('src', url + 'assets/img/notImg.png');
+    $('#tituloFormProduto').text('Novo Produto');
+    $('#msgProdutoForm').empty();
+    $('#formProduto').validate().resetForm();
+    $('#divProdutoForm').hide();
+    $('#divProdutoTabela').show();
 }
-function btnUpdateCurriculo($cod, $nome) {
-    ajaxApp('plano/buscaCurriculo', 'cod=' + $cod,
+
+function novoProduto() {
+    cancelarFormularioProduto();
+    mostrarFormularioProduto();
+}
+
+function listarProdutos() {
+    limparListar($tabelaLimparListarProdutos);
+    ajaxApp(
+            'produto/listarProdutos',
+            'c=' + $('#categoriaFiltroProduto').val() + '&e=' + $('#estadoFiltroProduto').val(),
             function (r) {
-                if ($.isNumeric(r)) {
-                    msgErroSpan('msgCurriculoTabela', 'danger', 'Erro 00' + r, 'Plano de Estudo <code>' + $nome + '</code> n&atilde;o encontrado');
+                if (r.r === 0) {
+                    if (r.dados.length) {
+                        $tabela.fnAddData(r.dados);
+                    }
                 } else {
-                    $('#codCur').val($cod);
-                    $('#planoCur').val(r.cod_plano);
-                    $('#classeCur').val(r.cod_classe);
-                    $('#notaCur').val(r.classificacao);
-                    $('#discCur').val(r.cod_disciplina);
-                    $('#codigoCur').val(r.codigo);
-                    mostraDivForm('divCurriculoForm', 'msgCurriculoForm');
-                    ocultaDivForm('divCurriculoTabela', 'msgCurriculoTabela');
-                    $('html, body').animate({scrollTop: 0}, 'slow');
+                    msgErroSpan('msgProdutoTabela', 'danger', 'Erro 00' + r.r, 'Não foi possível listar os produtos.');
                 }
             }
     );
 }
-function updateCurriculo() {
-    ajaxApp('plano/editarCurriculo', $('#formCurriculo').serialize(),
-            function (r) {
-                $smsPlano = 'Plano de Estudo <code>' + $('#discCur option:selected').text() + '</code> - <code>' + $('#classeCur option:selected').text() + '</code> - <code>' + $('#notaCur option:selected').text() + '</code> C&oacute;digo <code>' + $('#codigoCur').val() + '</code>';
-                if (r.r == 0) {
-                    msgErroSpan('msgCurriculoForm', 'info', 'Sucesso', $smsPlano + ' Actualizado');
-                    resetForm('formCurriculo', 'codCur');
-                } else if (r.r == -5) {
-                    msgErroSpan('msgCurriculoForm', 'warning', 'Corre&ccedil;&atilde;o 005', 'J&aacute; existe o ' + $smsPlano);
-                } else {
-                    msgErroSpan('msgCurriculoForm', 'danger ', 'Erro 00' + r.r, $smsPlano + ' n&atilde;o Actualizado');
-                }
-            });
-}
-$("#formCurriculo").validate({
-    rules: {planoCur: {required: true}, classeCur: {required: true}, discCur: {required: true}, notaCur: {required: true}, codigoCur: {minlength: 1, maxlength: 3, digits: true}},
-    submitHandler: function () {
-        if ($('#codCur').val()) {
-            updateCurriculo();
-        } else {
-            insertCurriculo();
+
+function editarProduto(cod) {
+    ajaxApp('produto/buscarProduto', 'cod=' + cod, function (r) {
+        if (r.r !== 0) {
+            msgErroSpan('msgProdutoTabela', 'danger', 'Erro 00' + r.r, 'Produto não encontrado.');
+            return;
         }
-    }
-});
-function deleteCurriculo($cod, $tr, $nome) {
-    swal({title: "Tens certeza que queres Eliminar a Linha do Plano \"" + $nome + "\"?", icon: "warning", allowOutsideClick: false, showCancelButton: true, confirmButtonColor: '#3085d6', cancelButtonColor: '#d33', confirmButtonText: 'SIM', cancelButtonText: 'NÃO'}).then((result) => {
-        if (result.value) {
-            ajaxApp('plano/apagarCurriculo', "cod=" + $cod,
-                    function (r) {
-                        if (r > 0) {
-                            $('#tabelaCurriculo').dataTable().fnDeleteRow($tr);
-                            msgErroSpan('msgCurriculoTabela', 'success', 'Sucesso', 'Plano <code>' + $nome + '</code> Eliminado');
-                        } else {
-                            msgErroSpan('msgCurriculoTabela', 'danger', 'Erro 00' + r, 'Plano <code>' + $nome + '</code> n&atilde;o Eliminado');
-                        }
-                    }
-            );
+
+        var produto = r.produto;
+        $('#codProduto').val(produto.cod);
+        $('#codigoProduto').val(produto.codigo);
+        $('#nomeProduto').val(produto.nome);
+        $('#precoProduto').val(produto.preco);
+        $('#categoriaProduto').val(produto.cod_categoria);
+        $('#imagemProdutoPreview').attr('src', url + produto.url_file);
+        $('#tituloFormProduto').text('Editar Produto');
+        mostrarFormularioProduto();
+    });
+}
+
+function salvarProduto() {
+    var dados = new FormData($('#formProduto')[0]);
+    ajaxFormData('produto/salvarProduto', dados, function (r) {
+        if (r.r === 0) {
+            cancelarFormularioProduto();
+            listarProdutos();
+            msgErroSpan('msgProdutoTabela', 'success', 'Sucesso', 'Produto guardado.');
+        } else if (r.r === -3) {
+            msgErroSpan('msgProdutoForm', 'warning', 'Correção', 'Já existe um produto com esse código.');
+        } else if (r.r === -5) {
+            msgErroSpan('msgProdutoForm', 'warning', 'Correção', 'A categoria selecionada já não está disponível.');
+        } else if (r.r === -7) {
+            msgErroSpan('msgProdutoForm', 'danger', 'Imagem inválida', r.mensagem || 'Verifique o formato e o tamanho da imagem.');
+        } else if (r.r === -8) {
+            msgErroSpan('msgProdutoForm', 'danger', 'Erro de gravação', r.mensagem);
+        } else if (r.r === -9) {
+            msgErroSpan('msgProdutoForm', 'danger', 'Acesso negado', 'A sua sessão não permite gerir produtos.');
+        } else {
+            msgErroSpan('msgProdutoForm', 'danger', 'Erro 00' + r.r, 'Produto não guardado.');
         }
     });
 }
 
-$tabelaLimparListarCurricular = ['tabelaCurriculo', 'msgCurriculoTabela'];
-function listarPlanoEstudo() {
-    limparListar($tabelaLimparListarCurricular);
-    ajaxApp('plano/listarCurricular', 'c=' + $("#classeLPE").val() + '&p=' + $("#planoLPE").val(),
-            function (r) {
-                if (r.r == 0) {
-                    $tabela.fnAddData(r.dados);
+function alterarEstadoProduto(cod, estadoAtual, nome) {
+    var novoEstado = estadoAtual === 0 ? 1 : 0;
+    swal({
+        title: 'Alterar estado do produto?',
+        text: 'Tens certeza que queres ' + (novoEstado === 1 ? 'desactivar' : 'activar') + ' o produto "' + nome + '"?',
+        icon: 'warning',
+        allowOutsideClick: false,
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'SIM',
+        cancelButtonText: 'NÃO'
+    }).then(function (result) {
+        if (result.value) {
+            ajaxApp('produto/alterarEstadoProduto', 'cod=' + cod + '&estado=' + novoEstado, function (r) {
+                if (r.r === 0) {
+                    listarProdutos();
+                    msgErroSpan('msgProdutoTabela', 'success', 'Sucesso', 'Estado do produto actualizado.');
                 } else {
-                    msgErroSpan('msgCurriculoTabela', 'danger ', 'ERRO 00' + r.r, 'N&atilde;o encontro nenhum registo');
+                    msgErroSpan('msgProdutoTabela', 'danger', 'Erro 00' + r.r, 'Não foi possível alterar o estado do produto.');
                 }
-            }
-    );
+            });
+        }
+    });
 }
-$('#tabPlanoEstudo').click(function () {
-    buscarOptionsPlanosConfig('planoLPE', $('#classeLPE').val());
-    limparListar($tabelaLimparListarCurricular);
-});
-$('#classeLPE').change(function () {
-    buscarOptionsPlanosConfig('planoLPE', $('#classeLPE').val());
-    limparListar($tabelaLimparListarCurricular);
-});
-$('#planoLPE').change(function () {
-    limparListar($tabelaLimparListarCurricular);
-});
-$('#btnLPE').click(function () {
-    listarPlanoEstudo();
+
+$('#imagemProduto').change(function () {
+    var arquivo = this.files && this.files[0];
+    if (arquivo && window.FileReader) {
+        var leitor = new FileReader();
+        leitor.onload = function (evento) {
+            $('#imagemProdutoPreview').attr('src', evento.target.result);
+        };
+        leitor.readAsDataURL(arquivo);
+    }
 });
 
-if ($('#tabelaCurriculo').size() > 0 && $('#msgCurriculoTabela').size() > 0) {
+$('#formProduto').validate({
+    rules: {
+        codigoProduto: {maxlength: 50},
+        nomeProduto: {required: true, maxlength: 255},
+        precoProduto: {required: true, number: true, min: 0.01},
+        categoriaProduto: {required: true},
+        imagemProduto: {extension: 'jpg|jpeg|png|gif'}
+    },
+    submitHandler: function () {
+        salvarProduto();
+    }
+});
+
+$('#btnListarProdutos').click(listarProdutos);
+$('.filtroProduto').change(listarProdutos);
+
+if ($('#tabelaProduto').length && $('#msgProdutoTabela').length) {
     $(function () {
-        buscarOptionsPlanosConfig('planoLPE', $('#classeLPE').val());
-        limparListar($tabelaLimparListarCurricular);
+        $tabela = $('#tabelaProduto').dataTable({
+            'bSort': false,
+            'bFilter': false,
+            'bInfo': true,
+            'bPaginate': true,
+            'bLengthChange': true,
+            'iDisplayLength': 10,
+            'bRetrieve': true,
+            'oLanguage': {
+                'sEmptyTable': '<center>Nenhum produto encontrado.</center>',
+                'sInfo': '_END_ de _TOTAL_ Produtos',
+                'sInfoEmpty': ''
+            }
+        });
+        listarProdutos();
     });
 }

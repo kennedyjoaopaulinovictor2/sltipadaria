@@ -7,14 +7,13 @@
                     <div class="form-body">
                         <?=
                         elementsHidden(array("codUtilizador", "trUtilizador", "codPEdit")) . '<span id="msgUtilizadorForm"></span>' .
-                        '<div class="row"><div class="col-md-3">' . elementoForm('Pessoa', 'pessoa', '<select class="form-control" $idname onchange="buscaPessoa();">' . optionSelect(array('#_Novo')) . optionSelectEntidade($pessoas, array('cod', 'nome')) . '</select>', '', '', '', '1') . '</div>' .
-                        '<div class="col-md-3">' . elementoForm('Nome', 'nome', '<input class="form-control" $idname type="text" placeholder="Primero e o Último Nome" onblur="textoIniciasMaiuscula(\'#nome\');" />', '', '', '', '1') . '</div>' .
-                        '<div class="col-md-3">' . elementoForm('Telefone', 'telefone', '<input class="form-control" $idname type="text" placeholder="N&ordm; de Telefone" />', '', '', '', '1') . '</div>' .
-                        '<div class="col-md-3">' . elementoForm('E-mail', 'email', '<input class="form-control" $idname type="text" placeholder="Correio Electrónico" />', '', '', '', '1') . '</div></div>' .
+                        '<div class="row"><div class="col-md-3">' . elementoForm('Pessoa existente (opcional)', 'pessoa', '<select class="form-control" $idname onchange="buscaPessoa();">' . optionSelect(array('#_Nova pessoa')) . optionSelectEntidade($pessoas, array('cod', 'nome')) . '</select>', '', '', '', '1') . '<small class="help-block"></small></div>' .
+                        '<div class="col-md-3">' . elementoForm('Nome', 'nome', '<input class="form-control" $idname type="text" maxlength="255" placeholder="Primero e o Último Nome" onblur="textoIniciasMaiuscula(\'#nome\');" />', '', '', '', '1') . '</div>' .
+                        '<div class="col-md-3">' . elementoForm('Telefone (opcional)', 'telefone', '<input class="form-control" $idname type="text" maxlength="9" placeholder="N&ordm; de Telefone" />', '', '', '', '1') . '</div>' .
+                        '<div class="col-md-3">' . elementoForm('E-mail (opcional)', 'email', '<input class="form-control" $idname type="email" maxlength="255" placeholder="Correio Electrónico" />', '', '', '', '1') . '</div></div>' .
                         '<div class="row"><div class="col-md-3">' . elementoForm('M&oacute;dulo', 'modulo', ' <select class="form-control" $idname>' . optionSelect(array('#')) . optionSelectEntidade($modulos, array('cod', 'nome')) . '</select>', '', '', '', '1') . '</div>' .
-                        '<div class="col-md-3">' . elementoForm('Privil&eacute;gios', 'tipoUser', '<select class="form-control" $idname>' . optionSelect(array('1_T&eacute;cnico', '2_Director')) . '</select>', '', '', '', '1') . '</div>' .
                         '<div class="col-md-3">' . elementoForm('SMS Acesso', 'smsUser', '<select class="form-control" $idname>' . optionSelect(array('1_Não Enviar', '2_Sim Enviar')) . '</select>', '', '', '', '1') . '</div>' .
-                        '<div class="col-md-3">' . elementoForm('Utilizador (opcional)', 'username', '<input class="form-control" $idname type="text" placeholder="Nome de Utilizador" />', '', '', '', '1') . '</div></div>'
+                        '<div class="col-md-3">' . elementoForm('Utilizador (opcional)', 'username', '<input class="form-control" $idname type="text" maxlength="255" placeholder="Nome de Utilizador" />', '', '', '', '1') . '</div></div>'
                         ?>
                     </div>
                     <?= btnFormActions("ocultaMostraDivsUtizador()"); ?>
@@ -34,7 +33,7 @@
                 <div class="form-body">
                     <?=
                     '<div class="row"><div class="col-md-3">' . elementoForm('Acesso', 'moduloLU', '<select class="form-control classLU" $idname>' . optionSelectEntidade($modulos, array('cod', 'nome')) . '</select>', '', '', '', '1') . '</div>' .
-                    '<div class="col-md-2">' . elementoForm('Estado', 'estLU', '<select class="form-control classLU" $idname>' . optionSelect(array('1_Activos', '2_Inactivos')) . '</select>', '', '', '', '1') . '</div>' .
+                    '<div class="col-md-2">' . elementoForm('Estado', 'estLU', '<select class="form-control classLU" $idname>' . optionSelect(array('all_Todos', '1_Activos', '2_Inactivos'), 'all') . '</select>', '', '', '', '1') . '</div>' .
                     '<div class="col-md-2">' . elementoForm('Clique Para', 'btnLU', '<button type="button" $idname class="btn-block btn btn-primary">Listar</button>', '', '', '', '1') . '</div></div>'
                     ?>
                     <span id="msgUtilizadorTabela"></span>

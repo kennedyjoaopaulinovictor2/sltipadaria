@@ -161,19 +161,23 @@ $('#tabSaida').click(function () {
 //GERIR FECHO
 if ($("#dataFecho").size() > 0) {
     var date = new Date();
-    $("#dataFecho").datepicker({
+    var configDataFecho = {
         format: "yyyy-mm-dd",
-        startDate: new Date(date.getFullYear(), 0, 01),
         endDate: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
         autoclose: true
-    });
+    };
+    if ($("#dataFecho").data('historico') != 1) {
+        configDataFecho.startDate = new Date(date.getFullYear(), 0, 01);
+    }
+    $("#dataFecho").datepicker(configDataFecho);
 }
 
 function updateVendaFecho($p, $c) {
     if ($("#qp" + $c).val()) {
+        var contextoAdmin = $('#msgTabelaFecho').data('contexto') === 'admin';
         ajaxApp(
                 'padaria/addUpdateFecho',
-                'u=' + $("#codUtilizador").val() + '&p=' + $p + '&d=' + $("#dataFecho").val() + '&q=' + $("#qp" + $c).val(),
+                'u=' + $("#codUtilizador").val() + '&p=' + $p + '&d=' + $("#dataFecho").val() + '&q=' + $("#qp" + $c).val() + (contextoAdmin ? '&contexto=admin' : ''),
                 function (r) {
                     if (r.r == 0) {
                         $("#qr" + $c).text(r.q);
@@ -190,11 +194,12 @@ function limparListarGerirFecho() {
     configDynamicTable();
     $tabela.fnClearTable();
 }
-function listarGerirFeicho() {
+function listarGerirFecho() {
     limparListarGerirFecho();
+    var contextoAdmin = $('#msgTabelaFecho').data('contexto') === 'admin';
     ajaxApp(
             'padaria/listarGerirFecho',
-            'u=' + $("#codUtilizador").val() + '&d=' + $("#dataFecho").val(),
+            'u=' + $("#codUtilizador").val() + '&d=' + $("#dataFecho").val() + (contextoAdmin ? '&contexto=admin' : ''),
             function (r) {
                 if (r.r == 0) {
                     $tabela.fnAddData(r.dados);
@@ -209,10 +214,10 @@ function listarGerirFeicho() {
     );
 }
 $('#tabFecho').click(function () {
-    listarGerirFeicho();
+    listarGerirFecho();
 });
 $('#btnFecho').click(function () {
-    listarGerirFeicho();
+    listarGerirFecho();
 });
 $('#btnMapaFecho').click(function () {
     var mes = $('#mesFechoMapa').val();
@@ -261,7 +266,8 @@ function atualizarTotalFechoValor($linha) {
 
 function listarGerirFechoValor() {
     var mes = $('#mesFechoValor').val();
-    ajaxApp('padaria/listarGerirFechoValor', {mes: mes}, function (r) {
+    var contexto = $('#tabelaFechoValor').attr('data-contexto');
+    ajaxApp('padaria/listarGerirFechoValor', {mes: mes, contexto: contexto}, function (r) {
         if (r.r !== 0) {
             alertSwal(r.r === 2 ? 'Selecione um mês válido, até o mês atual.' : 'Sessão expirada. Entre novamente na aplicação.');
             return;
@@ -356,16 +362,16 @@ function guardarFechoValorCelula($entrada) {
         return;
     }
     $entrada.prop('disabled', true);
-    ajaxApp('padaria/guardarFechoValor', {d: $linha.attr('data-data'), campo: campo, valor: valor, editar: editar ? '1' : '0'}, function (r) {
+    ajaxApp('padaria/guardarFechoValor', {d: $linha.attr('data-data'), campo: campo, valor: valor, editar: editar ? '1' : '0', contexto: $('#tabelaFechoValor').attr('data-contexto')}, function (r) {
         if (r.r === 0) {
-            $linha.find('.atendente-fecho-valor').text(r.atendente);
             $entrada.val(valor === '' ? '0' : valor).attr('data-guardado', '1').removeAttr('data-editando').prop('disabled', false).prop('readonly', true);
+            atualizarTotaisFechoValor($linha);
         } else if (r.r === 4) {
             alertSwal('Esta célula já foi guardada.');
             listarGerirFechoValor();
         } else {
             $entrada.prop('disabled', false).prop('readonly', false);
-            alertSwal(r.r === 3 ? 'Verifique os valores inseridos.' : 'Não foi possível guardar o fecho de valor.');
+            alertSwal(r.r === 2 ? 'No Atendimento, só é permitido alterar o fecho do dia actual.' : (r.r === 3 ? 'Verifique os valores inseridos.' : 'Não foi possível guardar o fecho de valor.'));
         }
     }, false, false);
 }

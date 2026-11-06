@@ -373,9 +373,9 @@ class XLSXWriter {
             $file->write('<c r="' . $cell_name . '" s="' . $cell_style_idx . '" t="n"><v>' . intval(self::convert_date_time($value)) . '</v></c>');
         } elseif ($num_format_type == 'n_datetime') {
             $file->write('<c r="' . $cell_name . '" s="' . $cell_style_idx . '" t="n"><v>' . self::convert_date_time($value) . '</v></c>');
-        } elseif ($num_format_type == 'n_numeric') {
+        } elseif ($num_format_type == 'n_numeric' && is_numeric($value)) {
             $file->write('<c r="' . $cell_name . '" s="' . $cell_style_idx . '" t="n"><v>' . self::xmlspecialchars($value) . '</v></c>'); //int,float,currency
-        } elseif ($num_format_type == 'n_string') {
+        } elseif ($num_format_type == 'n_numeric' || $num_format_type == 'n_string') {
             $file->write('<c r="' . $cell_name . '" s="' . $cell_style_idx . '" t="inlineStr"><is><t>' . self::xmlspecialchars($value) . '</t></is></c>');
         } elseif ($num_format_type == 'n_auto' || 1) { //auto-detect unknown column types
             if (!is_string($value) || $value == '0' || ($value[0] != '0' && ctype_digit($value)) || preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $value)) {
@@ -762,7 +762,7 @@ class XLSXWriter {
         //note, badchars does not include \t\n\r (\x09\x0a\x0d)
         static $badchars = "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f";
         static $goodchars = "                              ";
-        return strtr(htmlspecialchars($val, ENT_QUOTES | ENT_XML1), $badchars, $goodchars); //strtr appears to be faster than str_replace
+        return strtr(htmlspecialchars((string) $val, ENT_QUOTES | ENT_XML1), $badchars, $goodchars); //strtr appears to be faster than str_replace
     }
 
     //------------------------------------------------------------------

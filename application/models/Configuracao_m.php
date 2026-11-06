@@ -15,6 +15,26 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  */
 class Configuracao_m extends CI_Model {
 
+    public function getTextSmsByTipo($tipo) {
+        $query = $this->db->query(
+                "SELECT texto FROM sms_texto WHERE tipo=? ORDER BY cod DESC LIMIT 1",
+                array($tipo)
+        );
+        return ($query->num_rows() > 0 ? $query->row()->texto : NULL);
+    }
+
+    public function insertSmsEnviada($texto, $telefone, $tipoSms, $retorno, $codE = NULL, $anoL = NULL) {
+        return $this->db->insert('sms_enviada', array(
+            'ano_lectivo' => (!empty($anoL) ? $anoL : NULL),
+            'texto' => $texto,
+            'telefone' => $telefone,
+            'tipo_sms' => $tipoSms,
+            'retorno_app' => substr((string) $retorno, 0, 255),
+            'cod_entidade' => (!empty($codE) ? $codE : NULL),
+            'cod_utilizador' => (!empty(codUtilizador()) ? codUtilizador() : NULL)
+        ));
+    }
+
     public function getCountTabela($tabela, $where = '', $fun = "COUNT(*)", $alis = '') {
         $query = $this->db->query("SELECT " . $fun . ($alis ? ' as ' . $alis : ' as contSp') . " FROM $tabela " . (!empty($where) ? "WHERE $where " : "") . "LIMIT 1");
         if ($query->num_rows() > 0) {

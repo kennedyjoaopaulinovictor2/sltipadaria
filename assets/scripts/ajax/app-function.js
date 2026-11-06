@@ -38,7 +38,7 @@ function smsCampoObrigatorio() {
     return 'Campo Obrigat&oacute;rio';
 }
 
-function ajaxApp(url, data, funSuccess, modal = true, asicr = true) {
+function ajaxApp(url, data, funSuccess, modal = true, asicr = true, funError = null) {
     $.ajax({
         type: 'POST',
         url: urlAjax(url),
@@ -55,6 +55,10 @@ function ajaxApp(url, data, funSuccess, modal = true, asicr = true) {
         },
         success: function (r) {
             funSuccess(r);
+        },
+        error: function (xhr, status, error) {
+            if (typeof funError === 'function')
+                funError(xhr, status, error);
         }
     });
 }
