@@ -84,7 +84,7 @@ class Padaria_m extends CI_Model {
     }
 
     public function getFechosValorMes($dataInicio, $dataFim) {
-        $query = $this->db->query("SELECT f.*,p.nome atendente FROM fecho_valor f JOIN utilizador u ON u.cod=f.cod_utilizador JOIN pessoa p ON p.cod=u.cod_pessoa WHERE f.data BETWEEN ? AND ? ORDER BY f.data", array($dataInicio, $dataFim));
+        $query = $this->db->query("SELECT f.* FROM fecho_valor f WHERE f.data BETWEEN ? AND ? ORDER BY f.data", array($dataInicio, $dataFim));
         $fechos = array();
         foreach ($query->result_array() as $fecho)
             $fechos[$fecho['data']] = $fecho;

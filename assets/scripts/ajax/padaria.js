@@ -362,8 +362,8 @@ function guardarFechoValorCelula($entrada) {
     $entrada.prop('disabled', true);
     ajaxApp('padaria/guardarFechoValor', {d: $linha.attr('data-data'), campo: campo, valor: valor, editar: editar ? '1' : '0', contexto: $('#tabelaFechoValor').attr('data-contexto')}, function (r) {
         if (r.r === 0) {
-            $linha.find('.atendente-fecho-valor').text(r.atendente);
             $entrada.val(valor === '' ? '0' : valor).attr('data-guardado', '1').removeAttr('data-editando').prop('disabled', false).prop('readonly', true);
+            atualizarTotaisFechoValor($linha);
         } else if (r.r === 4) {
             alertSwal('Esta célula já foi guardada.');
             listarGerirFechoValor();
