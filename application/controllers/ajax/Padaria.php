@@ -22,11 +22,11 @@ class Padaria extends CI_Controller {
         return userModulo() === 'ADMINISTRADOR' ? 0 : -22;
     }
 
-    private function dataMapaValida($data) {
+    private function dataMapaValida($data, $permitirFuturo = FALSE) {
         if (!is_string($data))
             return FALSE;
         $dataValidada = DateTime::createFromFormat('!Y-m-d', $data);
-        return $dataValidada && $dataValidada->format('Y-m-d') === $data && $data <= date('Y-m-d');
+        return $dataValidada && $dataValidada->format('Y-m-d') === $data && substr($data, 0, 7) <= date('Y-m') && ($permitirFuturo || $data <= date('Y-m-d'));
     }
 
     private function mesMapaValido($mes) {
@@ -126,18 +126,26 @@ class Padaria extends CI_Controller {
     }
 
     function addUpdateFecho() {
-        if (!empty($this->input->post('u')) && !empty($this->input->post('p')) && !empty($this->input->post('d')) && !empty($this->input->post('q'))) {
-            if (isNumeric($this->input->post('u')) && isNumeric($this->input->post('p')) && isNumeric($this->input->post('q'))) {
-                if ($this->input->post('contexto', TRUE) !== 'admin')
-                    retornAjax(array('r' => -22));
-                $erroAcesso = $this->erroAcessoAdminMapas();
-                if ($erroAcesso !== 0)
-                    retornAjax(array('r' => $erroAcesso));
+        $codUtilizador = codUtilizador();
+        if (empty($codUtilizador) || userSession() !== (APP_ID_NOME . $codUtilizador))
+            retornAjax(array('r' => -21));
+        if (!empty($this->input->post('p')) && !empty($this->input->post('d')) && !empty($this->input->post('q'))) {
+            if (isNumeric($this->input->post('p')) && isNumeric($this->input->post('q'))) {
                 $data = $this->input->post('d', TRUE);
                 $quantidade = $this->input->post('q', TRUE);
-                if (!$this->dataMapaValida($data) || !preg_match('/^[1-9]\d{0,3}$/', (string) $quantidade) || (int) $quantidade > 5500)
+                $contextoAdmin = $this->input->post('contexto', TRUE) === 'admin';
+                if (!$this->dataMapaValida($data, $contextoAdmin) || !preg_match('/^[1-9]\d{0,3}$/', (string) $quantidade) || (int) $quantidade > 5500)
                     retornAjax(array('r' => 3));
-                $r = $this->padaria_m->insertUpdateFechoAdmin(codUtilizador(), (int) $this->input->post('p', TRUE), $data, (int) $quantidade);
+                if ($contextoAdmin) {
+                    $erroAcesso = $this->erroAcessoAdminMapas();
+                    if ($erroAcesso !== 0)
+                        retornAjax(array('r' => $erroAcesso));
+                    $r = $this->padaria_m->insertUpdateFechoAdmin($codUtilizador, (int) $this->input->post('p', TRUE), $data, (int) $quantidade);
+                } else {
+                    if ($data !== date('Y-m-d'))
+                        retornAjax(array('r' => 3));
+                    $r = $this->padaria_m->insertUpdateFecho($codUtilizador, (int) $this->input->post('p', TRUE), $data, (int) $quantidade);
+                }
                 retornAjax(is_array($r) ? array('r' => $r[0], 'q' => $r[1]) : array('r' => $r));
             } else
                 retornAjax(array('r' => '23'));
@@ -169,7 +177,7 @@ class Padaria extends CI_Controller {
                     $lista[$c++] = array('<center>' . $c . '<center>',
                         '<div class="user-info"><img alt="" src="' . base_url($produto['url_file']) . '" class="img-responsive" width="70" height="70" /><div class="details"><div><a href="#" id="np' . $c . '">' . $produto['nome'] . '</a></div></div></div>',
                         moeda_akz($produto['preco']),
-                        ($hoje ? '<input id="qp' . $c . '" type="number" value="' . $produto['qtdP'] . '"' . (!$contextoAdmin ? ' disabled' : '') . ' class="form-control" min="1" max="5500" maxlength="4" onkeypress="return inputSoNumero(event)" onkeydown="if((window.event?event.keyCode:event.which)==13){updateVendaFecho(\'' . $produto['cod'] . '\',' . $c . ');}">' : $produto['qtdP']),
+                        ($hoje ? '<input id="qp' . $c . '" type="number" value="' . $produto['qtdP'] . '" class="form-control" min="1" max="5500" maxlength="4" onkeypress="return inputSoNumero(event)" onkeydown="if((window.event?event.keyCode:event.which)==13){updateVendaFecho(\'' . $produto['cod'] . '\',' . $c . ');}">' : $produto['qtdP']),
                         '<span id="qv' . $c . '">' . $produto['qtdV'] . '</span>',
                         '<span id="qr' . $c . '" class="text-danger">' . $res.' '. moeda_akz($res*$produto['preco']) . '</span>',
                         moeda_akz($produto['valV']),
@@ -204,8 +212,11 @@ class Padaria extends CI_Controller {
         $dias = array();
         $data = new DateTime($dataInicio);
         $ultimoDia = new DateTime($dataFim);
-        for ($dia = clone $data; $dia <= $ultimoDia; $dia->modify('+1 day'))
-            $dias[$dia->format('Y-m-d')] = array('valores' => array(), 'funcionarios' => array(), 'total' => NULL);
+        $hoje = date('Y-m-d');
+        for ($dia = clone $data; $dia <= $ultimoDia; $dia->modify('+1 day')) {
+            $dataDia = $dia->format('Y-m-d');
+            $dias[$dataDia] = array('editavel' => TRUE, 'valores' => array(), 'funcionarios' => array(), 'total' => NULL);
+        }
 
         foreach ((array) $registos as $registo) {
             $codProduto = $registo['cod'];
@@ -236,10 +247,10 @@ class Padaria extends CI_Controller {
         $codProduto = $this->input->post('p', TRUE);
         $data = $this->input->post('d', TRUE);
         $quantidade = $this->input->post('q', TRUE);
-        if (!preg_match('/^[1-9]\d*$/', (string) $codProduto) || !$this->dataMapaValida($data) || !preg_match('/^[1-9]\d{0,3}$/', (string) $quantidade) || (int) $quantidade > 5500)
+        if (!preg_match('/^[1-9]\d*$/', (string) $codProduto) || !$this->dataMapaValida($data, TRUE) || !preg_match('/^[1-9]\d{0,3}$/', (string) $quantidade) || (int) $quantidade > 5500)
             retornAjax(array('r' => 3));
 
-        $resultado = $this->padaria_m->insertUpdateFecho(codUtilizador(), (int) $codProduto, $data, (int) $quantidade);
+        $resultado = $this->padaria_m->insertUpdateFechoAdmin(codUtilizador(), (int) $codProduto, $data, (int) $quantidade);
         retornAjax(array('r' => is_array($resultado) ? $resultado[0] : $resultado, 'q' => is_array($resultado) ? $resultado[1] : ''));
     }
 
@@ -320,7 +331,7 @@ class Padaria extends CI_Controller {
         for ($dia = clone $data; $dia <= $ultimoDia; $dia->modify('+1 day')) {
             $dataDia = $dia->format('Y-m-d');
             $registo = isset($registos[$dataDia]) ? $registos[$dataDia] : array();
-            $editavel = ($adminPodeEditarHistorico ? $dataDia <= $hoje : $dataDia === $hoje);
+            $editavel = ($adminPodeEditarHistorico ? TRUE : $dataDia === $hoje);
             $linha = array('data' => $dataDia, 'dataTexto' => $dia->format('d/m/Y'), 'atendente' => isset($registo['atendente']) ? $registo['atendente'] : '', 'editavel' => $editavel);
             $camposGuardados = isset($registo['campos_guardados']) ? explode(',', $registo['campos_guardados']) : array();
             foreach ($campos as $campo) {
@@ -328,6 +339,12 @@ class Padaria extends CI_Controller {
                 $linha[$campo] = ($salvo && isset($registo[$campo]) ? $registo[$campo] : '');
                 $linha[$campo . '_guardado'] = $salvo;
             }
+            $unidadesDinheiro = array('moeda_10' => 10, 'moeda_20' => 20, 'moeda_50' => 50, 'moeda_100' => 100, 'moeda_200' => 200, 'dinheiro_200' => 200, 'dinheiro_500' => 500, 'dinheiro_1000' => 1000, 'dinheiro_2000' => 2000, 'dinheiro_5000' => 5000);
+            $linha['notas'] = 0;
+            foreach ($unidadesDinheiro as $campo => $unidade)
+                if (in_array($campo, $camposGuardados, TRUE) && isset($registo[$campo]))
+                    $linha['notas'] += (int) $registo[$campo] * $unidade;
+            $linha['notas_guardado'] = TRUE;
             $dias[] = $linha;
         }
         retornAjax(array('r' => 0, 'mes' => $mes, 'dias' => $dias));
@@ -340,17 +357,17 @@ class Padaria extends CI_Controller {
             retornAjax(array('r' => -21));
         if (!is_string($data))
             retornAjax(array('r' => 2));
-        $dataValidada = DateTime::createFromFormat('!Y-m-d', (string) $data);
-        if (!$dataValidada || $dataValidada->format('Y-m-d') !== $data || substr($data, 0, 7) > date('Y-m') || $data > date('Y-m-d'))
-            retornAjax(array('r' => 2));
         $contexto = $this->input->post('contexto', TRUE);
         $adminPodeEditarHistorico = $contexto === 'admin' && userModulo() === 'ADMINISTRADOR';
+        $dataValidada = DateTime::createFromFormat('!Y-m-d', (string) $data);
+        if (!$dataValidada || $dataValidada->format('Y-m-d') !== $data || substr($data, 0, 7) > date('Y-m') || (!$adminPodeEditarHistorico && $data > date('Y-m-d')))
+            retornAjax(array('r' => 2));
         if (!$adminPodeEditarHistorico && $data !== date('Y-m-d'))
             retornAjax(array('r' => 2));
 
         $campo = $this->input->post('campo', TRUE);
         $camposInteiros = array('moeda_10', 'moeda_20', 'moeda_50', 'moeda_100', 'moeda_200', 'dinheiro_200', 'dinheiro_500', 'dinheiro_1000', 'dinheiro_2000', 'dinheiro_5000');
-        $camposPermitidos = array_merge($camposInteiros, array('tpa', 'notas'));
+        $camposPermitidos = array_merge($camposInteiros, array('tpa'));
         if (!in_array($campo, $camposPermitidos, TRUE))
             retornAjax(array('r' => 3));
 
@@ -426,6 +443,7 @@ class Padaria extends CI_Controller {
 
         $data = new DateTime($dataInicio);
         $ultimoDia = new DateTime($dataFim);
+        $unidadesDinheiro = array('moeda_10' => 10, 'moeda_20' => 20, 'moeda_50' => 50, 'moeda_100' => 100, 'moeda_200' => 200, 'dinheiro_200' => 200, 'dinheiro_500' => 500, 'dinheiro_1000' => 1000, 'dinheiro_2000' => 2000, 'dinheiro_5000' => 5000);
         for ($dia = clone $data; $dia <= $ultimoDia; $dia->modify('+1 day')) {
             $dataDia = $dia->format('Y-m-d');
             $fecho = isset($fechos[$dataDia]) ? $fechos[$dataDia] : array();
@@ -433,16 +451,15 @@ class Padaria extends CI_Controller {
             $linha = array($dia->format('d/m/Y'));
             $totalDinheiro = 0;
             $tpa = 0;
+            foreach ($unidadesDinheiro as $campo => $unidade)
+                if (in_array($campo, $camposGuardados, TRUE) && isset($fecho[$campo]))
+                    $totalDinheiro += (int) $fecho[$campo] * $unidade;
             foreach ($campos as $campo) {
                 $guardado = in_array($campo, $camposGuardados, TRUE) && isset($fecho[$campo]);
-                $valor = ($guardado ? $fecho[$campo] : '');
+                $valor = ($campo === 'notas' ? $totalDinheiro : ($guardado ? $fecho[$campo] : ''));
                 $linha[] = $valor;
-                if ($guardado) {
-                    if ($campo === 'tpa')
-                        $tpa = (float) $valor;
-                    else
-                        $totalDinheiro += (float) $valor;
-                }
+                if ($campo === 'tpa' && $guardado)
+                    $tpa = (float) $valor;
             }
             $linha[] = $totalDinheiro;
             $linha[] = $totalDinheiro + $tpa;

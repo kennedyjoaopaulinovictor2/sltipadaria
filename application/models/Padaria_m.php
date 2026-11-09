@@ -92,7 +92,7 @@ class Padaria_m extends CI_Model {
     }
 
     public function guardarFechoValorCelula($data, $campo, $valor, $codUtilizador, $editar = FALSE) {
-        $camposPermitidos = array('moeda_10', 'moeda_20', 'moeda_50', 'moeda_100', 'moeda_200', 'dinheiro_200', 'dinheiro_500', 'dinheiro_1000', 'dinheiro_2000', 'dinheiro_5000', 'tpa', 'notas');
+        $camposPermitidos = array('moeda_10', 'moeda_20', 'moeda_50', 'moeda_100', 'moeda_200', 'dinheiro_200', 'dinheiro_500', 'dinheiro_1000', 'dinheiro_2000', 'dinheiro_5000', 'tpa');
         if (!in_array($campo, $camposPermitidos, TRUE))
             return 3;
 
@@ -112,6 +112,21 @@ class Padaria_m extends CI_Model {
             }
         } else {
             $gravado = $this->db->insert('fecho_valor', array('data' => $data, $campo => $valor, 'campos_guardados' => $campo, 'cod_utilizador' => $codUtilizador));
+        }
+
+        if ($gravado && $campo !== 'tpa') {
+            $fecho = $this->db->query("SELECT moeda_10,moeda_20,moeda_50,moeda_100,moeda_200,dinheiro_200,dinheiro_500,dinheiro_1000,dinheiro_2000,dinheiro_5000 FROM fecho_valor WHERE data=? FOR UPDATE", array($data))->row_array();
+            $notas = (int) $fecho['moeda_10'] * 10
+                    + (int) $fecho['moeda_20'] * 20
+                    + (int) $fecho['moeda_50'] * 50
+                    + (int) $fecho['moeda_100'] * 100
+                    + (int) $fecho['moeda_200'] * 200
+                    + (int) $fecho['dinheiro_200'] * 200
+                    + (int) $fecho['dinheiro_500'] * 500
+                    + (int) $fecho['dinheiro_1000'] * 1000
+                    + (int) $fecho['dinheiro_2000'] * 2000
+                    + (int) $fecho['dinheiro_5000'] * 5000;
+            $gravado = $this->db->update('fecho_valor', array('notas' => $notas), array('data' => $data));
         }
 
         if (!$gravado || !$this->db->trans_status()) {

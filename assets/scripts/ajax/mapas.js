@@ -58,7 +58,7 @@ function carregarMapaFecho() {
             $('<td>').text(data.split('-').reverse().join('/')).appendTo($linha);
             $.each(r.produtos, function (_, produto) {
                 var valor = dia.valores[produto.cod];
-                if (valor) {
+                if (dia.editavel) {
                     var $entrada = $('<input>', {
                         type: 'number',
                         min: 1,
@@ -66,9 +66,14 @@ function carregarMapaFecho() {
                         step: 1,
                         class: 'form-control input-sm text-right mapa-producao',
                         'data-cod-produto': produto.cod
-                    }).val(valor.produzida);
-                    $('<td>').text(valor.restante).appendTo($linha);
+                    }).val(valor ? valor.produzida : 0);
+                    $('<td>').text(valor ? valor.restante : '-').appendTo($linha);
                     $('<td>').append($entrada).appendTo($linha);
+                    $('<td>').text(valor ? valor.vendida : '-').appendTo($linha);
+                    $('<td>').text(valor ? formatarValorMapa(valor.total) : '-').appendTo($linha);
+                } else if (valor) {
+                    $('<td>').text(valor.restante).appendTo($linha);
+                    $('<td>').text(valor.produzida).appendTo($linha);
                     $('<td>').text(valor.vendida).appendTo($linha);
                     $('<td>').text(formatarValorMapa(valor.total)).appendTo($linha);
                 } else {

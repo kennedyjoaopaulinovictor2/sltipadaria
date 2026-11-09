@@ -238,7 +238,7 @@ $('#btnMapaSaida').click(function () {
 
 var camposFechoValor = ['moeda_10', 'moeda_20', 'moeda_50', 'moeda_100', 'moeda_200', 'dinheiro_200', 'dinheiro_500', 'dinheiro_1000', 'dinheiro_2000', 'dinheiro_5000', 'tpa', 'notas'];
 function atualizarTotalFechoValor($linha) {
-    var total = 0;
+    var dinheiro = 0;
     var valoresMoedas = {
         moeda_10: 10,
         moeda_20: 20,
@@ -253,15 +253,13 @@ function atualizarTotalFechoValor($linha) {
     };
 
     $.each(valoresMoedas, function (campo, valorUnidade) {
-        total += (parseInt($linha.find('[data-campo="' + campo + '"]').val(), 10) || 0) * valorUnidade;
+        dinheiro += (parseInt($linha.find('[data-campo="' + campo + '"]').val(), 10) || 0) * valorUnidade;
     });
-    total += parseFloat($linha.find('[data-campo="tpa"]').val()) || 0;
-    total += parseFloat($linha.find('[data-campo="notas"]').val()) || 0;
+    var tpa = parseFloat($linha.find('[data-campo="tpa"]').val()) || 0;
+    var formatoMoeda = {minimumFractionDigits: 2, maximumFractionDigits: 2};
 
-    $linha.find('.total-fecho-valor').text(total.toLocaleString('pt-PT', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }));
+    $linha.find('.fecho-valor-notas').text(dinheiro.toLocaleString('pt-PT', formatoMoeda));
+    $linha.find('.total-fecho-valor').text((dinheiro + tpa).toLocaleString('pt-PT', formatoMoeda));
 }
 
 function listarGerirFechoValor() {
@@ -278,14 +276,21 @@ function listarGerirFechoValor() {
             var $linha = $('<tr>').attr('data-data', dia.data);
             $('<td>').text(dia.dataTexto).appendTo($linha);
             $.each(camposFechoValor, function (_, campo) {
-                var monetario = campo === 'tpa' || campo === 'notas';
+                if (campo === 'notas') {
+                    $('<td>').addClass('fecho-valor-notas text-right').text((parseFloat(dia.notas) || 0).toLocaleString('pt-PT', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    })).appendTo($linha);
+                    return;
+                }
+                var monetario = campo === 'tpa';
                 var $entrada = $('<input>', {
                     type: monetario ? 'number' : 'text',
                     min: '0',
                     step: monetario ? '0.01' : '1',
                     class: 'form-control input-sm text-right',
                     'data-campo': campo
-                }).val(dia[campo]).prop('disabled', !dia.editavel).prop('readonly', dia[campo + '_guardado']);
+                }).val(dia[campo]).prop('disabled', !dia.editavel).prop('readonly', contexto !== 'admin' && dia[campo + '_guardado']);
                 $entrada.attr('data-guardado', dia[campo + '_guardado'] ? '1' : '0');
                 if (monetario) {
                     $entrada.attr('inputmode', 'decimal');
@@ -338,7 +343,7 @@ $(document).on('keydown', '#corpoTabelaFechoValor input', function (event) {
         return false;
     }
     var campo = $(this).attr('data-campo');
-    var monetario = campo === 'tpa' || campo === 'notas';
+    var monetario = campo === 'tpa';
     var teclasControlo = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
     if (event.ctrlKey || event.metaKey || teclasControlo.indexOf(event.key) !== -1)
         return;
@@ -346,7 +351,8 @@ $(document).on('keydown', '#corpoTabelaFechoValor input', function (event) {
         event.preventDefault();
 });
 function guardarFechoValorCelula($entrada) {
-    var editar = $entrada.attr('data-editando') === '1';
+    var contextoAdmin = $('#tabelaFechoValor').attr('data-contexto') === 'admin';
+    var editar = contextoAdmin || $entrada.attr('data-editando') === '1';
     if ($entrada.prop('disabled') || ($entrada.prop('readonly') && !editar))
         return;
     var $linha = $entrada.closest('tr');
@@ -364,8 +370,10 @@ function guardarFechoValorCelula($entrada) {
     $entrada.prop('disabled', true);
     ajaxApp('padaria/guardarFechoValor', {d: $linha.attr('data-data'), campo: campo, valor: valor, editar: editar ? '1' : '0', contexto: $('#tabelaFechoValor').attr('data-contexto')}, function (r) {
         if (r.r === 0) {
-            $entrada.val(valor === '' ? '0' : valor).attr('data-guardado', '1').removeAttr('data-editando').prop('disabled', false).prop('readonly', true);
-            atualizarTotaisFechoValor($linha);
+            $entrada.val(valor === '' ? '0' : valor).attr('data-guardado', '1').removeAttr('data-editando').prop('disabled', false).prop('readonly', !contextoAdmin);
+            if (contextoAdmin)
+                $entrada.attr('data-editando', '1');
+            atualizarTotalFechoValor($linha);
         } else if (r.r === 4) {
             alertSwal('Esta célula já foi guardada.');
             listarGerirFechoValor();
